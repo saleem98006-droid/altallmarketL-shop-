@@ -1,0 +1,28 @@
+workflows:
+  ios_only_build:
+    name: iOS Only Build
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: Install dependencies
+        script: |
+          flutter pub get
+
+      - name: Build iOS IPA
+        script: |
+          flutter build ipa --release
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        apple_id: $APPLE_ID
+        api_key_id: $APP_STORE_KEY_ID
+        issuer_id: $APP_STORE_ISSUER_ID
+        api_key: $APP_STORE_API_KEY
+        submit_to_testflight: true
+        submit_to_app_store: false
