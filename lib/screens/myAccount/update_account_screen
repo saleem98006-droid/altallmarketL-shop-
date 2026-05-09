@@ -1,0 +1,1279 @@
+//الصفحة مع زر حذف
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import '../snackBar/snackbar.dart';
+import '../../utils/image_compressor.dart';
+
+class UpdateAccountPage extends StatefulWidget {
+  const UpdateAccountPage({super.key});
+
+  @override
+  State<UpdateAccountPage> createState() => _UpdateAccountPageState();
+}
+
+class _UpdateAccountPageState extends State<UpdateAccountPage> {
+  // 🟢 حالات عامة
+  final _formKey = GlobalKey<FormState>();
+  Map<String, dynamic>? shopData;
+  Map<String, dynamic>? ownerData; // 👈 بيانات صاحب المحل الأصلية
+  bool isLoading = true;
+  bool isSaving = false;
+  bool coverImageDeleted = false;
+bool avatarImageDeleted = false;
+String? coverImageBase64;   // صورة الغلاف Base64
+String? avatarImageBase64;  // الصورة الدائرية Base64
+  // 🏪 بيانات المحل
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _detailsController = TextEditingController();
+  List<TextEditingController> phoneControllers = [];
+
+  // 🖼️ صور
+  final ImagePicker _picker = ImagePicker();
+  
+  Uint8List? coverImageBytes;     // صورة الغلاف
+ Uint8List? avatarImageBytes;    // الصورة الدائرية
+
+
+  // 👤 بيانات صاحب المحل
+  final TextEditingController _ownerNameController = TextEditingController();
+  final TextEditingController _ownerPhoneController = TextEditingController();
+  final TextEditingController _ownerEmailController = TextEditingController();
+  int? _ownerId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadShop();
+  }
+
+  Future<void> _loadShop() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  // 🏪 جلب shopId
+  final shopId = prefs.getInt('shopId') ?? 0;
+  if (shopId == 0) {
+    print("⚠️ لم يتم العثور على shopId في التخزين");
+    return;
+  }
+
+  // 🏪 جلب بيانات المحل
+  
+  final result = await ApiService.getShopById(shopId);
+if (result != null) {
+  // 🟢 حفظ Base64 + bytes
+  coverImageBase64 = result['shopImageBase64'];
+  if (coverImageBase64 != null && coverImageBase64!.isNotEmpty) {
+    coverImageBytes = base64Decode(coverImageBase64!);
+  }
+
+  avatarImageBase64 = result['shopImage2Base64'];
+  if (avatarImageBase64 != null && avatarImageBase64!.isNotEmpty) {
+    avatarImageBytes = base64Decode(avatarImageBase64!);
+  }
+
+  setState(() {
+    shopData = result;
+    _nameController.text = result['shopName'] ?? '';
+    _addressController.text = result['address'] ?? '';
+    _detailsController.text = result['detailes'] ?? '';
+
+    final phones = List<String>.from(result['phoneNumbers'] ?? []);
+    phoneControllers =
+        phones.map((p) => TextEditingController(text: p)).toList();
+    if (phoneControllers.isEmpty) {
+      phoneControllers.add(TextEditingController());
+    }
+
+    isLoading = false;
+  });
+}
+
+  // 👤 جلب ownerId
+  final ownerId = prefs.getInt('ownerId');
+  _ownerId = ownerId ?? 0;
+
+  if (_ownerId != null) {
+    final ownerResult = await ApiService.getOwnerById(_ownerId!);
+    print("📡 ownerResult from API: $ownerResult");
+
+    if (ownerResult != null) {
+      ownerData = ownerResult; // 👈 خزنا نسخة أصلية
+      _ownerId = ownerResult['shopOwnerId'] ?? _ownerId;
+      _ownerNameController.text = ownerResult['fullName'] ?? '';
+      _ownerPhoneController.text = ownerResult['phoneNumber'] ?? '';
+      _ownerEmailController.text = ownerResult['email'] ?? '';
+    } else {
+      print("⚠️ لم يتم جلب بيانات صاحب المحل");
+    }
+  } else {
+    print("⚠️ ownerId غير موجود في SharedPreferences");
+  }
+}
+
+
+List<Map<String, dynamic>> _buildDefaultHours() {
+  const days = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+
+  return days
+      .map((d) => {
+            "dayOfWeek": d,
+            "openTime": "",
+            "closeTime": "",
+            "isClosed": false,
+          })
+      .toList();
+}
+ void _showHoursDialog(List<dynamic>? hours) {
+  bool isSaving = false; // ممتاز
+
+  // 👇 ضعي هذا هنا مباشرة
+  late List<Map<String, dynamic>> editableHours;
+
+  if (hours == null || hours.isEmpty) {
+    const days = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+
+    editableHours = days
+        .map((d) => {
+              "dayOfWeek": d,
+              "openTime": "",
+              "closeTime": "",
+              "isClosed": false,
+            })
+        .toList();
+  } else {
+    editableHours =
+        hours.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  // 👇 الآن فقط نأخذ نسخة من القيم الأصلية
+  final originalHours = editableHours
+      .map((e) => Map<String, dynamic>.from(e))
+      .toList();
+
+  // 🟢 Controllers لكل يوم
+  final openControllers = <String, TextEditingController>{};
+  final closeControllers = <String, TextEditingController>{};
+  final holiday = <String, bool>{};
+
+  for (var item in editableHours) {
+    final day = item["dayOfWeek"];
+    openControllers[day] = TextEditingController(text: item["openTime"]);
+    closeControllers[day] = TextEditingController(text: item["closeTime"]);
+    holiday[day] = item["isClosed"] == true;
+  }
+
+  // 🟢 دالة اختيار الوقت
+  Future<void> _pickTime(BuildContext context, TextEditingController controller) async {
+    final initial = controller.text.isNotEmpty
+        ? TimeOfDay(
+            hour: int.parse(controller.text.split(":")[0]),
+            minute: int.parse(controller.text.split(":")[1]),
+          )
+        : const TimeOfDay(hour: 8, minute: 0);
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+    );
+
+    if (picked != null) {
+      controller.text =
+          "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+    }
+  }
+
+ 
+showDialog(
+  context: context,
+  builder: (context) {
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            backgroundColor: Colors.white,
+            title: const Text("أوقات الدوام", textAlign: TextAlign.center),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    Row(
+                      children: const [
+                        SizedBox(
+                            width: 70,
+                            child: Text("اليوم",
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        Expanded(
+                            child: Center(
+                                child: Text("فتح",
+                                    style: TextStyle(fontWeight: FontWeight.bold)))),
+                        Expanded(
+                            child: Center(
+                                child: Text("إغلاق",
+                                    style: TextStyle(fontWeight: FontWeight.bold)))),
+                        SizedBox(
+                            width: 70,
+                            child: Center(
+                                child: Text("عطلة",
+                                    style: TextStyle(fontWeight: FontWeight.bold)))),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Column(
+                      children: editableHours.map((item) {
+                        final day = item["dayOfWeek"];
+                        final isHoliday = holiday[day] ?? false;
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                  width: 70,
+                                  child: Text(day,
+                                      style: const TextStyle(fontSize: 14))),
+
+                              const SizedBox(width: 4),
+
+                              Expanded(
+                                child: isHoliday
+                                    ? const SizedBox()
+                                    : TextField(
+                                        controller: openControllers[day],
+                                        readOnly: true,
+                                        textAlign: TextAlign.center,
+                                        onTap: () =>
+                                            _pickTime(context, openControllers[day]!),
+                                        decoration: const InputDecoration(),
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                              ),
+
+                              const SizedBox(width: 4),
+
+                              Expanded(
+                                child: isHoliday
+                                    ? const SizedBox()
+                                    : TextField(
+                                        controller: closeControllers[day],
+                                        readOnly: true,
+                                        textAlign: TextAlign.center,
+                                        onTap: () =>
+                                            _pickTime(context, closeControllers[day]!),
+                                        decoration: const InputDecoration(),
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                              ),
+
+                              const SizedBox(width: 4),
+
+                              SizedBox(
+                                width: 70,
+                                child: Center(
+                                  child: Checkbox(
+                                    shape: const CircleBorder(),
+                                    value: isHoliday,
+                                    activeColor: const Color(0xFF5A9BD5),
+                                    onChanged: (val) {
+                                      setState(() {
+                                        holiday[day] = val ?? false;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+
+            actionsAlignment: MainAxisAlignment.spaceBetween,
+            actions: [
+             // زر حفظ
+SizedBox(
+  width: 120,
+  height: 40,
+  child: OutlinedButton(
+    style: OutlinedButton.styleFrom(
+      side: const BorderSide(color: Color(0xFF5A9BD5), width: 2),
+      backgroundColor: Colors.white,
+      foregroundColor: Colors.black,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(25),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+    ),
+    onPressed: isSaving
+        ? null
+        : () async {
+            setState(() => isSaving = true);
+
+            // 🟢 تحديث editableHours بالقيم الجديدة
+            for (var item in editableHours) {
+              final day = item["dayOfWeek"];
+              item["openTime"] = openControllers[day]!.text;
+              item["closeTime"] = closeControllers[day]!.text;
+              item["isClosed"] = holiday[day] ?? false;
+            }
+
+            // 🔵 مقارنة القيم القديمة مع الجديدة (مقارنة دقيقة 100%)
+            bool noChanges = true;
+
+            for (int i = 0; i < editableHours.length; i++) {
+              final oldItem = originalHours[i];
+              final newItem = editableHours[i];
+
+              if (oldItem["openTime"].toString() != newItem["openTime"].toString() ||
+                  oldItem["closeTime"].toString() != newItem["closeTime"].toString() ||
+                  (oldItem["isClosed"] == true) != (newItem["isClosed"] == true)) {
+                noChanges = false;
+                break;
+              }
+            }
+
+            // 🔵 إذا لا يوجد أي تغيير → أغلق الديالوج فقط
+            if (noChanges) {
+              setState(() => isSaving = false);
+              Navigator.of(context, rootNavigator: true).pop(); // 👈 يغلق الديالوج فقط
+              return;
+            }
+
+            // 🔵 متابعة الحفظ إذا حدث تغيير
+            final prefs = await SharedPreferences.getInstance();
+            final shopId = prefs.getInt("shopId");
+
+            if (shopId == null) {
+              snackBar(context, "❌ لم يتم العثور على رقم المحل");
+              setState(() => isSaving = false);
+              return;
+            }
+
+            final result = await ApiService.updateShopHours(
+              shopId,
+              editableHours,
+            );
+
+            setState(() => isSaving = false);
+            Navigator.of(context, rootNavigator: true).pop(); // 👈 يغلق الديالوج فقط
+
+            if (result != null) {
+              snackBar(context, "✔ تم حفظ أوقات الدوام");
+              _loadShop();
+            } else {
+              snackBar(context, "فشل الحفظ");
+            }
+          },
+    child: isSaving
+        ? const SizedBox(
+            height: 20,
+            width: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFF5A9BD5),
+            ),
+          )
+        : const Text(
+            "حفظ",
+            style: TextStyle(
+              fontSize: 12,
+              fontFamily: "Tajawal",
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+  ),
+),
+
+              // زر إلغاء
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF5A9BD5), width: 2),
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  minimumSize: const Size(120, 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  "إلغاء",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontFamily: "Tajawal",
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  },
+);
+}
+  
+
+Future<void> _saveChanges() async {
+  if (_formKey.currentState!.validate()) {
+
+    setState(() => isSaving = true); // 🟢 بدأ التحميل
+
+    final prefs = await SharedPreferences.getInstance();
+    final shopId = prefs.getInt('shopId') ?? 0;
+
+    if (shopId == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("⚠️ لم يتم العثور على معرف المحل")),
+      );
+      setState(() => isSaving = false); // 🔵 إيقاف التحميل
+      Navigator.pop(context, false);
+      return;
+    }
+
+    // 🏪 البيانات الجديدة للمحل
+    final Map<String, dynamic> updatedData = {
+  "shopName": _nameController.text,
+  "address": _addressController.text,
+  "detailes": _detailsController.text,
+  "phoneNumbers": phoneControllers.map((c) => c.text).toList(),
+  
+};
+// صورة الغلاف
+if (coverImageDeleted) {
+  updatedData["shopImageBase64"] = null; // 🔥 حذف صريح
+} else if (coverImageBase64 != null) {
+  updatedData["shopImageBase64"] = coverImageBase64; // صورة جديدة
+} else {
+  // لم تُعدّل الصورة في الواجهة → نرسل القديمة كما هي
+  updatedData["shopImageBase64"] = shopData?["shopImageBase64"];
+}
+
+// الصورة الدائرية
+if (avatarImageDeleted) {
+  updatedData["shopImage2Base64"] = null; // 🔥 حذف صريح
+} else if (avatarImageBase64 != null) {
+  updatedData["shopImage2Base64"] = avatarImageBase64;
+} else {
+  updatedData["shopImage2Base64"] = shopData?["shopImage2Base64"];
+}
+
+final oldCover = shopData?["shopImageBase64"];
+final oldAvatar = shopData?["shopImage2Base64"];
+
+final newCover = coverImageDeleted
+    ? null
+    : (coverImageBase64 ?? oldCover);
+
+final newAvatar = avatarImageDeleted
+    ? null
+    : (avatarImageBase64 ?? oldAvatar);
+
+    // ✅ مقارنة بيانات المحل
+    bool noShopChanges =
+    updatedData["shopName"] == (shopData?["shopName"] ?? "") &&
+    updatedData["address"] == (shopData?["address"] ?? "") &&
+    updatedData["detailes"] == (shopData?["detailes"] ?? "") &&
+    listEquals(
+      (updatedData["phoneNumbers"] as List<String>?),
+      List<String>.from(shopData?["phoneNumbers"] ?? []),
+    ) &&
+    newCover == oldCover &&
+    newAvatar == oldAvatar;
+
+    // ✅ مقارنة بيانات صاحب المحل
+    bool noOwnerChanges = true;
+    if (_ownerId != null && ownerData != null) {
+      noOwnerChanges =
+          _ownerNameController.text == (ownerData?["fullName"] ?? "") &&
+              _ownerPhoneController.text == (ownerData?["phoneNumber"] ?? "") &&
+              _ownerEmailController.text == (ownerData?["email"] ?? "");
+    }
+
+    // إذا ما صار أي تعديل
+    if (noShopChanges && noOwnerChanges) {
+      snackBar(context, "لم يتم تعديل اي بيانات");
+      setState(() => isSaving = false); // 🔵 إيقاف التحميل
+      Navigator.pop(context, false);
+      return;
+    }
+
+    // إذا صار تعديل على بيانات المحل
+    if (!noShopChanges) {
+      final result = await ApiService.updateShop(shopId, updatedData);
+      if (result == null || result['status'] != true) {
+        snackBar(context, result?['message'] ?? "❌ فشل في حفظ بيانات المحل");
+        setState(() => isSaving = false); // 🔵 إيقاف التحميل
+        return;
+      }
+    }
+
+    // إذا صار تعديل على بيانات صاحب المحل
+    if (_ownerId != null && !noOwnerChanges) {
+      final ownerUpdateData = {
+        "shopOwnerId": _ownerId,
+        "fullName": _ownerNameController.text,
+        "phoneNumber": _ownerPhoneController.text,
+        "email": _ownerEmailController.text,
+        "profileImageBase64": "",
+      };
+
+      final ownerResult = await ApiService.updateOwner(ownerUpdateData);
+      if (ownerResult == null || ownerResult['status'] != true) {
+        snackBar(context, ownerResult?['message'] ?? "❌ فشل في حفظ بيانات صاحب المحل");
+        setState(() => isSaving = false); // 🔵 إيقاف التحميل
+        return;
+      }
+
+      // 🟢 حفظ رقم الهاتف الجديد قبل الرجوع
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("phoneNumber", _ownerPhoneController.text);
+    }
+
+    // ✅ إذا وصلنا لهون يعني التعديلات نجحت أو تم تعديل جزء منها
+    snackBar(context, "تم حفظ التعديلات بنجاح");
+    setState(() => isSaving = false); // 🔵 إيقاف التحميل
+    Navigator.pop(context, true);
+  }
+}
+void _showImageOptions(BuildContext context, int index) {
+  final hasImage = index == 0
+    ? (coverImageBytes != null ||
+        (shopData?['shopImageBase64'] != null &&
+         shopData!['shopImageBase64'].toString().isNotEmpty))
+    : (avatarImageBytes != null ||
+        (shopData?['shopImage2Base64'] != null &&
+         shopData!['shopImage2Base64'].toString().isNotEmpty));
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.white, // 👈 خلفية بيضاء
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(40), // 👈 انحناء أكبر
+      ),
+    ),
+    builder: (_) {
+      return Directionality( // 👈 لضبط الاتجاه من اليمين
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (hasImage)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text(
+                    "حذف الصورة",
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  onTap: () {
+  Navigator.pop(context);
+  setState(() {
+   if (index == 0) {
+  coverImageDeleted = true;
+  coverImageBase64 = null;
+  coverImageBytes = null;
+  
+  
+} else {
+  avatarImageDeleted = true;
+  avatarImageBase64 = null;
+  avatarImageBytes = null;
+  
+}
+  });
+  snackBar(context, "تم حذف الصورة");
+},
+                ),
+
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFF5A9BD5)),
+                title: const Text(
+                  "اختيار من المعرض",
+                  style: TextStyle(fontSize: 16),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(index);
+                },
+              ),
+
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+
+
+
+ Future<void> _pickImage(int index) async {
+  final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+  if (pickedFile == null) return;
+
+  final file = File(pickedFile.path);
+  final bytes = await file.readAsBytes();
+  final compressedBase64 = await ImageCompressor.compressFile(file);
+
+  setState(() {
+    if (index == 0) {
+      coverImageBase64 = compressedBase64;
+      coverImageBytes = bytes;
+    } else {
+      avatarImageBase64 = compressedBase64;
+      avatarImageBytes = bytes;
+    }
+  });
+}
+
+
+  Future<String?> _encodeImage(File? file) async {
+  if (file == null) return null;
+
+  try {
+    return await ImageCompressor.compressFile(file);
+  } catch (e) {
+    return null;
+  }
+}
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  void _showChangePasswordDialog() {
+  final oldPassController = TextEditingController();
+  final newPassController = TextEditingController();
+
+  bool oldPasswordVisible = false;
+  bool newPasswordVisible = false;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(100),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 73, sigmaY: 25),
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          "تغيير كلمة المرور",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ============================
+                        //   كلمة المرور القديمة
+                        // ============================
+                        TextFormField(
+                          controller: oldPassController,
+                          obscureText: !oldPasswordVisible,
+                          style: const TextStyle(color: Colors.black),
+                          decoration: InputDecoration(
+                            labelText: "كلمة المرور القديمة",
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                oldPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                                color: Color(0xFF5A9BD5),
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  oldPasswordVisible = !oldPasswordVisible;
+                                });
+                              },
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: const BorderSide(color: Color(0xFF5A9BD5)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: const BorderSide(color: Color(0xFF5A9BD5)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFF5A9BD5), width: 2),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // ============================
+                        //   كلمة المرور الجديدة
+                        // ============================
+                        TextFormField(
+                          controller: newPassController,
+                          obscureText: !newPasswordVisible,
+                          style: const TextStyle(color: Colors.black),
+                          decoration: InputDecoration(
+                            labelText: "كلمة المرور الجديدة",
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                newPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                                color: Color(0xFF5A9BD5),
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  newPasswordVisible = !newPasswordVisible;
+                                });
+                              },
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: const BorderSide(color: Color(0xFF5A9BD5)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: const BorderSide(color: Color(0xFF5A9BD5)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(30),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFF5A9BD5), width: 2),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ============================
+                        //   الأزرار
+                        // ============================
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            // زر إلغاء
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.black,
+                                side: const BorderSide(
+                                    color: Color(0xFFFF0000), width: 2),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ).copyWith(
+                                backgroundColor:
+                                    MaterialStateProperty.resolveWith<Color>(
+                                  (states) {
+                                    if (states.contains(MaterialState.pressed)) {
+                                      return const Color(0xFFFF0000);
+                                    }
+                                    return Colors.white;
+                                  },
+                                ),
+                                foregroundColor:
+                                    MaterialStateProperty.resolveWith<Color>(
+                                  (states) {
+                                    if (states.contains(MaterialState.pressed)) {
+                                      return Colors.white;
+                                    }
+                                    return Colors.black;
+                                  },
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              child: const Text("إلغاء"),
+                            ),
+
+                            // زر موافق
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.black,
+                                side: const BorderSide(
+                                    color: Color(0xFF5A9BD5), width: 2),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ).copyWith(
+                                backgroundColor:
+                                    MaterialStateProperty.resolveWith<Color>(
+                                  (states) {
+                                    if (states.contains(MaterialState.pressed)) {
+                                      return const Color(0xFF5A9BD5);
+                                    }
+                                    return Colors.white;
+                                  },
+                                ),
+                                foregroundColor:
+                                    MaterialStateProperty.resolveWith<Color>(
+                                  (states) {
+                                    if (states.contains(MaterialState.pressed)) {
+                                      return Colors.white;
+                                    }
+                                    return Colors.black;
+                                  },
+                                ),
+                              ),
+                              onPressed: () async {
+                                if (newPassController.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text("يجب إدخال كلمة المرور الجديدة")),
+                                  );
+                                  return;
+                                }
+
+                                final result =
+                                    await ApiService.changeOwnerPassword(
+                                  _ownerId!,
+                                  oldPassController.text,
+                                  newPassController.text,
+                                );
+
+                                Navigator.pop(context);
+
+                               
+                                snackBar(context, result?['message'] ??
+                                          " فشل في تغيير كلمة المرور");
+                              },
+                              child: const Text("موافق"),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+@override
+Widget build(BuildContext context) {
+  final screenHeight = MediaQuery.of(context).size.height;
+
+  if (isLoading) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+
+ return Scaffold(
+  body: Form(
+    key: _formKey,
+    child: ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        const SizedBox(height: 31),
+
+        _buildHeaderImages(context),
+
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              // ============================
+              //   حقول النص RTL
+              // ============================
+              Directionality(
+  textDirection: TextDirection.rtl, // 👈 يجعل العنوان على اليمين
+  child: TextFormField(
+    controller: _nameController,
+    textDirection: TextDirection.rtl,
+    decoration: const InputDecoration(
+      labelText: "اسم المحل",
+      border: OutlineInputBorder(),
+    ),
+    validator: (v) =>
+        v == null || v.isEmpty ? "الرجاء إدخال اسم المحل" : null,
+  ),
+),
+const SizedBox(height: 15),
+
+Directionality(
+  textDirection: TextDirection.rtl,
+  child: TextFormField(
+    controller: _addressController,
+    textDirection: TextDirection.rtl,
+    decoration: const InputDecoration(
+      labelText: "العنوان",
+      border: OutlineInputBorder(),
+    ),
+  ),
+),
+const SizedBox(height: 15),
+
+Directionality(
+  textDirection: TextDirection.rtl,
+  child: TextFormField(
+    controller: _detailsController,
+    textDirection: TextDirection.rtl,
+    maxLines: 3,
+    decoration: const InputDecoration(
+      labelText: "الوصف",
+      border: OutlineInputBorder(),
+    ),
+  ),
+),
+
+             const SizedBox(height: 30),
+
+
+
+// ============================
+//   أرقام الهواتف
+// ============================
+...phoneControllers.asMap().entries.map((entry) {
+  final index = entry.key;
+  final controller = entry.value;
+
+  final bool isLast = index == phoneControllers.length - 1;
+
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Directionality(
+      textDirection: TextDirection.rtl,
+      child: TextFormField(
+        controller: controller,
+        textDirection: TextDirection.rtl,
+        textAlign: TextAlign.right,
+        keyboardType: TextInputType.phone,
+        decoration: InputDecoration(
+          labelText: "رقم ${index + 1}",
+          border: const OutlineInputBorder(),
+
+          // ============================
+          //   أيقونات داخل الحقل
+          // ============================
+
+          // أيقونة السلة على اليسار
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // زر الحذف
+             IconButton(
+  icon: const Icon(
+    Icons.remove_circle,
+    color: Color(0xFF5A9BD5),
+    size: 28,
+  ),
+  onPressed: () {
+    setState(() {
+      phoneControllers.removeAt(index);
+    });
+  },
+),
+
+              // زر الإضافة يظهر فقط في آخر حقل
+              if (isLast && phoneControllers.length < 5)
+                IconButton(
+                  icon: const Icon(Icons.add_circle,
+                      color: Color(0xFF5A9BD5), size: 28),
+                  onPressed: () {
+                    setState(() {
+                      phoneControllers.add(TextEditingController());
+                    });
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}),
+
+const SizedBox(height: 20),
+             
+
+            
+
+             Directionality(
+  textDirection: TextDirection.rtl, // 👈 يجعل العنوان على اليمين
+  child: TextFormField(
+    controller: _ownerNameController,
+    textDirection: TextDirection.rtl,
+    decoration: const InputDecoration(
+      labelText: "اسم صاحب المحل",
+      prefixIcon: Icon(Icons.person),
+      border: OutlineInputBorder(),
+    ),
+  ),
+),
+const SizedBox(height: 15),
+
+Directionality(
+  textDirection: TextDirection.rtl,
+  child: TextFormField(
+    controller: _ownerPhoneController,
+    textDirection: TextDirection.rtl,
+    decoration: const InputDecoration(
+      labelText: "رقم الهاتف",
+      prefixIcon: Icon(Icons.phone),
+      border: OutlineInputBorder(),
+    ),
+    keyboardType: TextInputType.phone,
+  ),
+),
+const SizedBox(height: 15),
+
+Directionality(
+  textDirection: TextDirection.rtl,
+  child: TextFormField(
+    controller: _ownerEmailController,
+    textDirection: TextDirection.rtl,
+    decoration: const InputDecoration(
+      labelText: "البريد الإلكتروني",
+      prefixIcon: Icon(Icons.email),
+      border: OutlineInputBorder(),
+    ),
+    keyboardType: TextInputType.emailAddress,
+  ),
+),
+
+              const SizedBox(height: 15),
+
+             Center(
+  child: Column(
+    children: [
+      GestureDetector(
+        onTap: _showChangePasswordDialog,
+        child: Text(
+          "إعادة تعيين كلمة المرور",
+          style: TextStyle(
+            color: Color(0xFF5A9BD5),     // اللون الأزرق
+            fontSize: 16,
+            decoration: TextDecoration.underline, // خط تحت النص
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      GestureDetector(
+  onTap: () async {
+    final prefs = await SharedPreferences.getInstance();
+    final shopId = prefs.getInt("shopId");
+
+    if (shopId == null) {
+      snackBar(context, "❌ لم يتم العثور على رقم المحل");
+      return;
+    }
+
+    final hours = await ApiService.getShopHours(shopId);
+
+    // 🟢 إذا لا توجد أوقات دوام → نفتح الديالوج للإضافة
+    if (hours == null || hours.isEmpty) {
+      _showHoursDialog(_buildDefaultHours());
+      return;
+    }
+
+    // 🟢 إذا توجد أوقات → نفتح الديالوج للتعديل
+    _showHoursDialog(hours);
+  },
+  child: const Text(
+    "تعديل أوقات الدوام",
+    style: TextStyle(
+      color: Color(0xFF5A9BD5),
+      fontSize: 16,
+      decoration: TextDecoration.underline,
+      fontWeight: FontWeight.w600,
+      //fontFamily: "Tajawal",
+    ),
+  ),
+),
+    ],
+  ),
+),
+
+
+
+              const SizedBox(height: 20),
+
+              // ============================
+              //   زر حفظ التعديلات بدون style
+              // ============================
+           SizedBox(
+  width: double.infinity,
+  child: OutlinedButton(
+    onPressed: isSaving ? null : _saveChanges,
+    child: isSaving
+        ? const SizedBox(
+            height: 22,
+            width: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+            ),
+          )
+        : const Text(
+            "تأكيد",
+            style: TextStyle(
+              fontFamily: "Tajawal",
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+  ),
+),
+
+            ],
+          ),
+        ),
+      ],
+    ),
+  ),
+);
+
+
+}
+
+Widget _buildHeaderImages(BuildContext context) {
+  final screenHeight = MediaQuery.of(context).size.height;
+  final screenWidth = MediaQuery.of(context).size.width;
+
+  final double coverHeight = screenHeight * 0.2; 
+  final double avatarRadius = 50;
+
+  return SizedBox(
+    width: screenWidth,
+    height: coverHeight + avatarRadius + 20,
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // 🔵 صورة الغلاف
+GestureDetector(
+  onTap: () => _showImageOptions(context, 0),
+  child: ClipRRect(
+    borderRadius: const BorderRadius.only(
+      bottomLeft: Radius.circular(40),
+      bottomRight: Radius.circular(40),
+    ),
+   child: SizedBox(
+  width: screenWidth,
+  height: coverHeight,
+  child: coverImageBytes != null
+    ? Image.memory(coverImageBytes!, fit: BoxFit.cover)
+    : coverImageDeleted
+        ? Container(
+            color: Colors.grey[300],
+            child: const Icon(Icons.store, size: 80, color: Color(0xFF5A9BD5)),
+          )
+        : (shopData?['shopImageBase64'] != null &&
+                shopData!['shopImageBase64'].toString().isNotEmpty)
+            ? Image.memory(base64Decode(shopData!['shopImageBase64']), fit: BoxFit.cover)
+            : Container(
+                color: Colors.grey[300],
+                child: const Icon(Icons.store, size: 80, color: Color(0xFF5A9BD5)),
+              ),
+),
+  ),
+),
+
+        // 🔵 الصورة الدائرية
+        Positioned(
+          top: coverHeight - avatarRadius,
+          left: 16,
+          child: GestureDetector(
+            onTap: () => _showImageOptions(context, 1),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 4),
+              ),
+              child: CircleAvatar(
+  radius: avatarRadius,
+
+  // ✨ الصورة (ذاكرة → ثم Base64 → ثم لا شيء)
+ backgroundImage: avatarImageBytes != null
+    ? MemoryImage(avatarImageBytes!)
+    : avatarImageDeleted
+        ? null
+        : (shopData?['shopImage2Base64'] != null &&
+                shopData!['shopImage2Base64'].toString().isNotEmpty)
+            ? MemoryImage(base64Decode(shopData!['shopImage2Base64']))
+            : null,
+),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
+
+}
+
+

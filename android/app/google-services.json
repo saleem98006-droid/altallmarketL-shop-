@@ -1,0 +1,120 @@
+{
+  "project_info": {
+    "project_number": "274987076652",
+    "project_id": "altall-market",
+    "storage_bucket": "altall-market.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:274987076652:android:09ab71e94b27a247d49589",
+        "android_client_info": {
+          "package_name": "com.altall.market.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA68DgX3pzml2RFGKxp0Dsy6taDQcH1MxU"
+        },
+        {
+          "current_key": "AIzaSyBz15juhTB3ChSwUpHobP8tTtVscapk42s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:274987076652:android:39fc0063fb3ba9c0d49589",
+        "android_client_info": {
+          "package_name": "com.altall.market.delivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA68DgX3pzml2RFGKxp0Dsy6taDQcH1MxU"
+        },
+        {
+          "current_key": "AIzaSyBz15juhTB3ChSwUpHobP8tTtVscapk42s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:274987076652:android:32955b83cb3432ccd49589",
+        "android_client_info": {
+          "package_name": "com.altall.market.manger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA68DgX3pzml2RFGKxp0Dsy6taDQcH1MxU"
+        },
+        {
+          "current_key": "AIzaSyBz15juhTB3ChSwUpHobP8tTtVscapk42s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:274987076652:android:4744e0fc649041e6d49589",
+        "android_client_info": {
+          "package_name": "com.altall.market.shop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA68DgX3pzml2RFGKxp0Dsy6taDQcH1MxU"
+        },
+        {
+          "current_key": "AIzaSyBz15juhTB3ChSwUpHobP8tTtVscapk42s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:274987076652:android:67d4b124b0a28b1bd49589",
+        "android_client_info": {
+          "package_name": "com.altall.market.station"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA68DgX3pzml2RFGKxp0Dsy6taDQcH1MxU"
+        },
+        {
+          "current_key": "AIzaSyBz15juhTB3ChSwUpHobP8tTtVscapk42s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

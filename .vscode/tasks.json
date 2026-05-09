@@ -1,0 +1,104 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "delete-unused-files",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Remove-Item -LiteralPath \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\map_picker.dart\" -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\offer_card1.dart\" -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\TM_Station.code-workspace\" -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\home0\\shimmer_widgets.dart\" -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\sectionProduct\\discount_card_small.dart\" -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\utils\\widgets.dart\" -Force -ErrorAction SilentlyContinue"
+			],
+			"group": "none"
+		},
+		{
+			"label": "delete-unused-files-cmd",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"del /f /q \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\map_picker.dart\" & del /f /q \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\offer_card1.dart\" & del /f /q \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\TM_Station.code-workspace\" & del /f /q \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\home0\\shimmer_widgets.dart\" & del /f /q \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\sectionProduct\\discount_card_small.dart\" & del /f /q \"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\utils\\widgets.dart\""
+			],
+			"group": "none"
+		},
+		{
+			"label": "delete-map-picker",
+			"type": "shell",
+			"command": "Remove-Item",
+			"args": [
+				"-LiteralPath",
+				"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\map_picker.dart",
+				"-Force",
+				"-ErrorAction",
+				"SilentlyContinue"
+			],
+			"group": "none"
+		},
+		{
+			"label": "delete-offer-card1",
+			"type": "shell",
+			"command": "Remove-Item",
+			"args": [
+				"-LiteralPath",
+				"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\offer_card1.dart",
+				"-Force",
+				"-ErrorAction",
+				"SilentlyContinue"
+			],
+			"group": "none"
+		},
+		{
+			"label": "delete-workspace-file",
+			"type": "shell",
+			"command": "Remove-Item",
+			"args": [
+				"-LiteralPath",
+				"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\TM_Station.code-workspace",
+				"-Force",
+				"-ErrorAction",
+				"SilentlyContinue"
+			],
+			"group": "none"
+		},
+		{
+			"label": "delete-shimmer-widgets",
+			"type": "shell",
+			"command": "Remove-Item",
+			"args": [
+				"-LiteralPath",
+				"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\home0\\shimmer_widgets.dart",
+				"-Force",
+				"-ErrorAction",
+				"SilentlyContinue"
+			],
+			"group": "none"
+		},
+		{
+			"label": "delete-discount-card-small",
+			"type": "shell",
+			"command": "Remove-Item",
+			"args": [
+				"-LiteralPath",
+				"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\screens\\sectionProduct\\discount_card_small.dart",
+				"-Force",
+				"-ErrorAction",
+				"SilentlyContinue"
+			],
+			"group": "none"
+		},
+		{
+			"label": "delete-utils-widgets",
+			"type": "shell",
+			"command": "Remove-Item",
+			"args": [
+				"-LiteralPath",
+				"C:\\Users\\Dell\\Desktop\\project\\new1\\TM Shop\\lib\\utils\\widgets.dart",
+				"-Force",
+				"-ErrorAction",
+				"SilentlyContinue"
+			],
+			"group": "none"
+		}
+	]
+}
