@@ -342,8 +342,10 @@ class _SignupStep3State extends State<SignupStep3> {
   final address = prefs.getString('address') ?? '';
   final detailes = prefs.getString('detailes') ?? '';
   final categoryId = prefs.getInt('categoryId') ?? 0;
+  final isDollarEnabled = prefs.getBool('isDollarEnabled') ?? false;
   final phones = prefs.getStringList('shopPhones') ?? [];
   final ownerId = prefs.getInt('ownerId'); // 👈 رقم صاحب المحل
+  final ownerPhone = prefs.getString('phoneNumber') ?? '';
 
     if (ownerId == null || ownerId <= 0) {
       setState(() => _isLoading = false);
@@ -352,8 +354,35 @@ class _SignupStep3State extends State<SignupStep3> {
       return;
     }
 
-    final alreadyRegistered =
-        await ApiService.checkShopExistsByOwnerId(ownerId.toString());
+    bool alreadyRegistered = false;
+    try {
+      // ✅ فحص موثوق: حالة صاحب المحل عبر رقم الهاتف
+      // endpoint /shops?ownerId غير موثوق حالياً لأنه يرجع كل المحلات في بعض الحالات.
+      if (ownerPhone.isNotEmpty) {
+        final status = await ApiService.checkOwnerStatus(ownerPhone);
+        if (status['success'] == true && status['data'] is Map) {
+          final data = Map<String, dynamic>.from(status['data']);
+
+          final rawOwnerId = data['shopOwnerId'];
+          final statusOwnerId = rawOwnerId is int
+              ? rawOwnerId
+              : int.tryParse(rawOwnerId?.toString() ?? '');
+
+          final rawShopId = data['shopId'];
+          final statusShopId = rawShopId is int
+              ? rawShopId
+              : int.tryParse(rawShopId?.toString() ?? '');
+
+          alreadyRegistered =
+              (statusOwnerId != null && statusOwnerId == ownerId) &&
+              (statusShopId != null && statusShopId > 0);
+        }
+      }
+    } catch (e) {
+      print('⚠️ owner status precheck failed in signup_step3: $e');
+      alreadyRegistered = false;
+    }
+
     if (alreadyRegistered) {
       setState(() => _isLoading = false);
       if (!mounted) return;
@@ -410,6 +439,7 @@ String? logoBase64 = await ImageCompressor.compressFile(logoImage);
     "AreaName": detectedAreaName,
     "detailes": detailes,
     "categoryId": categoryId,
+    "isDollarEnabled": isDollarEnabled,
     "shopOwnerId": ownerId,
     "shopPhones": phones, // ✅ إرسال القائمة كاملة بدل phoneNumber
     "shopImageBase64": coverBase64,
@@ -433,6 +463,7 @@ String? logoBase64 = await ImageCompressor.compressFile(logoImage);
       print("💾 Saved shopId: $shopId");
     }
     await prefs.setInt('areaID', detectedAreaId);
+    await prefs.setBool('isDollarEnabled', isDollarEnabled);
     if (detectedAreaName.isNotEmpty) {
       await prefs.setString('areaName', detectedAreaName);
     }

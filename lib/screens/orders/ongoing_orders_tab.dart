@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/api_service.dart';
 import '../order_details_screen.dart';
@@ -157,9 +158,62 @@ class _OngoingOrdersTabState extends State<OngoingOrdersTab> {
     }
   }
 
+  Widget _buildOrdersShimmer() {
+    Widget shimmerCard() {
+      return Shimmer.fromColors(
+        baseColor: Colors.grey.shade300,
+        highlightColor: Colors.grey.shade100,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(height: 16, margin: const EdgeInsets.symmetric(horizontal: 80), color: Colors.white),
+              const SizedBox(height: 14),
+              Container(height: 12, margin: const EdgeInsets.only(right: 90, left: 24), color: Colors.white),
+              const SizedBox(height: 10),
+              Container(height: 12, margin: const EdgeInsets.only(right: 130, left: 24), color: Colors.white),
+              const SizedBox(height: 10),
+              Container(height: 12, margin: const EdgeInsets.only(right: 70, left: 24), color: Colors.white),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 4,
+      itemBuilder: (_, __) => shimmerCard(),
+    );
+  }
+
+  Widget _buildLoadMoreShimmer() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Shimmer.fromColors(
+        baseColor: Colors.grey.shade300,
+        highlightColor: Colors.grey.shade100,
+        child: Container(
+          height: 22,
+          margin: const EdgeInsets.symmetric(horizontal: 120),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (isLoading) return const Center(child: CircularProgressIndicator());
+    if (isLoading) return _buildOrdersShimmer();
 
     final filteredOrders = widget.searchQuery.trim().isEmpty
         ? orders
@@ -221,10 +275,7 @@ class _OngoingOrdersTabState extends State<OngoingOrdersTab> {
                 _loadOrders();
               });
 
-              return const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()),
-              );
+              return _buildLoadMoreShimmer();
             }
 
             return SizedBox(height: screenHeight * 0.1);

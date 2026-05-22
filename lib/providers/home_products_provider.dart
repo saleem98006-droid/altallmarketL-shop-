@@ -18,6 +18,31 @@ class HomeProductsNotifier extends StateNotifier<HomeProductsState> {
 
   final HomeProductsRepository _repository;
 
+  List<dynamic> _dedupeByProductId(List<dynamic> items) {
+    final seen = <String>{};
+    final result = <dynamic>[];
+
+    for (final item in items) {
+      if (item is! Map) {
+        result.add(item);
+        continue;
+      }
+
+      final map = item as Map;
+      final key = (map['productId'] ?? map['ProductID'] ?? map['id'])?.toString();
+      if (key == null || key.isEmpty) {
+        result.add(item);
+        continue;
+      }
+
+      if (seen.add(key)) {
+        result.add(item);
+      }
+    }
+
+    return result;
+  }
+
   Future<void> refreshSectionsOnly() async {
     state = HomeProductsState.initial();
     await loadSections();
@@ -99,10 +124,10 @@ class HomeProductsNotifier extends StateNotifier<HomeProductsState> {
       hasMoreMap[sectionId] = false;
     } else {
       currentProducts.addAll(newProducts);
-      productsMap[sectionId] = currentProducts;
+      productsMap[sectionId] = _dedupeByProductId(currentProducts);
       pageMap[sectionId] = page + 1;
 
-      if (currentProducts.length >= total) {
+      if ((productsMap[sectionId]?.length ?? 0) >= total) {
         hasMoreMap[sectionId] = false;
       }
     }
@@ -135,7 +160,7 @@ class HomeProductsNotifier extends StateNotifier<HomeProductsState> {
     final pageMap = Map<int, int>.from(state.productPage);
     final hasMoreMap = Map<int, bool>.from(state.hasMoreProducts);
 
-    productsMap[sectionId] = newProducts;
+    productsMap[sectionId] = _dedupeByProductId(newProducts);
     pageMap[sectionId] = 2;
     hasMoreMap[sectionId] = newProducts.length < total;
 

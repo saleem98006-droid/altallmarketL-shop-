@@ -29,6 +29,7 @@ class EditProductScreen extends StatefulWidget {
 class _EditProductScreenState extends State<EditProductScreen> {
   late TextEditingController nameController;
   late TextEditingController priceController;
+  late TextEditingController priceUsdController;
   late TextEditingController descController;
 
  File? image1File;
@@ -40,6 +41,7 @@ String? image2Url;
 String? image3Url;
 
   bool isSaving = false;
+  bool _isDollarEnabled = false;
 
   final ImagePicker _picker = ImagePicker();
 
@@ -58,6 +60,10 @@ String? image3Url;
     // 🟢 تحميل بيانات المنتج
     nameController = TextEditingController(text: widget.product['productName'] ?? '');
     priceController = TextEditingController(text: widget.product['price']?.toString() ?? '');
+    final dynamic rawUsd = widget.product['priceUSD'] ??
+      widget.product['priceUsd'] ??
+      widget.product['PriceUSD'];
+    priceUsdController = TextEditingController(text: rawUsd?.toString() ?? '');
     descController = TextEditingController(text: widget.product['description'] ?? '');
 
   image1Url = widget.product['imageUrl1'];
@@ -70,6 +76,7 @@ image3Url = widget.product['imageUrl3'];
  oldProduct = {
   "productName": widget.product['productName'] ?? '',
   "price": widget.product['price']?.toString() ?? '',
+  "priceUSD": rawUsd?.toString() ?? '',
   "description": widget.product['description'] ?? '',
   "sectionId": widget.product['sectionId'],
   "imageUrl1": widget.product['imageUrl1'],
@@ -93,6 +100,43 @@ image3Url = widget.product['imageUrl3'];
     }
 
     _loadSections();
+    _loadShopCurrencySettings();
+  }
+
+  Future<void> _loadShopCurrencySettings() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    bool isDollarEnabled = prefs.getBool('isDollarEnabled') ?? false;
+    final shopId = prefs.getInt('shopId') ?? 0;
+
+    if (shopId > 0) {
+      final shopData = await ApiService.getShopById(shopId);
+      if (shopData != null) {
+        if (shopData.containsKey('isDollarEnabled') ||
+            shopData.containsKey('IsDollarEnabled')) {
+          final rawDollar =
+              shopData['isDollarEnabled'] ?? shopData['IsDollarEnabled'];
+          isDollarEnabled = rawDollar == true ||
+              rawDollar.toString().trim().toLowerCase() == 'true' ||
+              rawDollar.toString().trim() == '1';
+          await prefs.setBool('isDollarEnabled', isDollarEnabled);
+        }
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isDollarEnabled = isDollarEnabled;
+    });
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    priceController.dispose();
+    priceUsdController.dispose();
+    descController.dispose();
+    super.dispose();
   }
 
   // تحميل الأقسام
@@ -228,9 +272,38 @@ Widget _emptyImage() {
 
   // حفظ المنتج بدون كاش
  Future<bool> _saveProductChanges() async {
+  final String sypText = priceController.text.trim();
+  final String usdText = priceUsdController.text.trim();
+
+  final double? priceSyp = sypText.isEmpty ? null : double.tryParse(sypText);
+  final double? priceUsd = usdText.isEmpty ? null : double.tryParse(usdText);
+
+  if (_isDollarEnabled) {
+    if (priceSyp == null && priceUsd == null) {
+      snackBar(context, "يجب إدخال سعر واحد على الأقل (سوري أو دولار)");
+      return false;
+    }
+  } else {
+    if (priceSyp == null || priceSyp <= 0) {
+      snackBar(context, "الرجاء إدخال السعر بالليرة السورية بشكل صحيح");
+      return false;
+    }
+  }
+
+  if (priceSyp != null && priceSyp <= 0) {
+    snackBar(context, "السعر بالليرة يجب أن يكون أكبر من الصفر");
+    return false;
+  }
+
+  if (priceUsd != null && priceUsd <= 0) {
+    snackBar(context, "السعر بالدولار يجب أن يكون أكبر من الصفر");
+    return false;
+  }
+
   final newData = {
     "productName": nameController.text.trim(),
-    "price": double.tryParse(priceController.text.trim()) ?? 0,
+    "price": priceSyp,
+    "priceUSD": priceUsd,
     "description": descController.text.trim(),
     "sectionId": selectedSectionId,
 
@@ -272,6 +345,7 @@ Widget _emptyImage() {
     // تحديث المنتج مباشرة في الواجهة
     widget.product['productName'] = newData['productName'];
     widget.product['price'] = newData['price'];
+    widget.product['priceUSD'] = newData['priceUSD'];
     widget.product['description'] = newData['description'];
     widget.product['sectionId'] = newData['sectionId'];
 
@@ -282,11 +356,6 @@ Widget _emptyImage() {
     widget.product['imageUrl3'] = newData['imageUrl3'];
 
     oldProduct = Map.from(newData);
-
-    AppEvents().emit("refresh_sections");
-    AppEvents().emit("refresh_product_detail");
-
-    AppEvents().emit("refresh_section_products");
 
     return true;
   }
@@ -312,11 +381,6 @@ Widget _emptyImage() {
     final response = await ApiService.updateOffer(offerId, offer!);
 
     if (response != null && response['success'] == true) {
-      
-      AppEvents().emit("refresh_offers");
-AppEvents().emit("refresh_product_detail");
-
-             AppEvents().emit("refresh_section_products");
              return true;
     }
 
@@ -359,6 +423,7 @@ AppEvents().emit("refresh_sections");
   bool changed = 
       nameController.text != oldProduct['productName'] ||
       priceController.text != oldProduct['price'] ||
+      priceUsdController.text != oldProduct['priceUSD'] ||
       descController.text != oldProduct['description'] ||
       selectedSectionId != oldProduct['sectionId'];
 
@@ -454,6 +519,16 @@ _buildImageBox(3),
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: "السعر"),
             ),
+            if (_isDollarEnabled) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: priceUsdController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration:
+                    const InputDecoration(labelText: "السعر بالدولار (اختياري)"),
+              ),
+            ],
             const SizedBox(height: 12),
 
             // ✔ الوصف

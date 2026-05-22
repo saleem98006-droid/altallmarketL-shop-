@@ -8,6 +8,7 @@ import 'snackBar/snackbar.dart';
 import '../core/app_events.dart';
 import '../providers/router_provider.dart';
 import 'dart:async';
+import 'package:shimmer/shimmer.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -110,6 +111,7 @@ imageUrls.add(cacheBusted);
     normalized['productId'] = p['productId'] ?? p['ProductID'] ?? p['id'];
     normalized['productName'] = p['productName'] ?? p['ProductName'];
     normalized['price'] = p['price'] ?? p['Price'];
+    normalized['priceUSD'] = p['priceUSD'] ?? p['priceUsd'] ?? p['PriceUSD'];
     normalized['description'] = p['description'] ?? p['Description'] ?? '';
     normalized['isActive'] = p['isActive'] ?? p['IsActive'] ?? true;
 
@@ -126,7 +128,9 @@ normalized['imageUrl3'] = p['imageUrl3'] ?? p['image3'] ?? p['Image_3'];
   Future<void> _ensureFullProduct() async {
     final id = product['productId'];
     final needsRefresh =
-        (product['isActive'] == null || product['price'] == null);
+        (product['isActive'] == null ||
+            product['price'] == null ||
+            product['priceUSD'] == null);
 
     if (id != null && needsRefresh) {
       setState(() => _loading = true);
@@ -203,10 +207,97 @@ normalized['imageUrl3'] = p['imageUrl3'] ?? p['image3'] ?? p['Image_3'];
   return "عرض مميز";
 }
 
+  double? _readUsdPrice() {
+    final raw = product['priceUSD'] ?? product['priceUsd'] ?? product['PriceUSD'];
+    if (raw == null) return null;
+    if (raw is num) return raw.toDouble();
+    return double.tryParse(raw.toString());
+  }
+
+  String _formatUsd(double value) {
+    if (value == value.roundToDouble()) return value.toInt().toString();
+    return value.toStringAsFixed(2);
+  }
+
+  Widget _buildDetailsShimmer() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              height: MediaQuery.of(context).size.height * 0.30,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              height: 24,
+              margin: const EdgeInsets.symmetric(horizontal: 70),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              height: 18,
+              margin: const EdgeInsets.symmetric(horizontal: 100),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              height: 16,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Shimmer.fromColors(
+            baseColor: Colors.grey.shade300,
+            highlightColor: Colors.grey.shade100,
+            child: Container(
+              height: 16,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
 Widget build(BuildContext context) {
   final double price =
       (product['price'] is num) ? (product['price'] as num).toDouble() : 0.0;
+  final double? priceUsd = _readUsdPrice();
   final double discountValue =
       (offer != null && offer!['discountValue'] is num)
           ? (offer!['discountValue'] as num).toDouble()
@@ -229,7 +320,7 @@ Widget build(BuildContext context) {
           // ============================
           SafeArea(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? _buildDetailsShimmer()
                 : Column(
                     children: [
                       // 🖼️ الصور خارج السكرول
@@ -380,7 +471,7 @@ itemBuilder: (context, index) {
                               const SizedBox(height: 16),
 
                               // 💰 السعر
-                              _buildPriceSection(price, finalPrice),
+                              _buildPriceSection(price, finalPrice, priceUsd),
 
                               const SizedBox(height: 16),
 
@@ -620,7 +711,7 @@ itemBuilder: (context, index) {
   );
 }
 
-Widget _buildPriceSection(double price, double finalPrice) {
+Widget _buildPriceSection(double price, double finalPrice, double? priceUsd) {
   if (offer != null && offer!['offerType'] == "DirectDiscount") {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,13 +732,40 @@ Widget _buildPriceSection(double price, double finalPrice) {
             fontSize: 18,
           ),
         ),
+        if (priceUsd != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            "${_formatUsd(priceUsd)} دولار",
+            style: const TextStyle(
+              fontSize: 15,
+              color: Colors.green,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  return Text(
-    "${price.toInt()} ل.س",
-    style: const TextStyle(fontSize: 18, color: Color(0xFF5A9BD5)),
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        "${price.toInt()} ل.س",
+        style: const TextStyle(fontSize: 18, color: Color(0xFF5A9BD5)),
+      ),
+      if (priceUsd != null) ...[
+        const SizedBox(height: 4),
+        Text(
+          "${_formatUsd(priceUsd)} دولار",
+          style: const TextStyle(
+            fontSize: 15,
+            color: Colors.green,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ],
   );
 }
 Widget _buildOfferSection() {

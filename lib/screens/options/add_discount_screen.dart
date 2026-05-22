@@ -164,6 +164,9 @@ class _AddDiscountScreenState extends State<AddDiscountScreen> {
       // ✔ حالة مع إشعار
       // -----------------------------
       if (discountId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final areaId = prefs.getInt('areaID') ?? prefs.getInt('areaId') ?? 0;
+
         print("Selected Product ID = $selectedProductId");
         final notifyResult = await ApiService.sendAndDistribute(
           context,
@@ -172,6 +175,7 @@ class _AddDiscountScreenState extends State<AddDiscountScreen> {
             "contextType": "Discount",
             "discountTitle": "خصم جديد",
             "senderId": shopId,
+            "areaId": areaId,
             "relatedEntity": "Offer",
             "relatedId": selectedProductId,
           },

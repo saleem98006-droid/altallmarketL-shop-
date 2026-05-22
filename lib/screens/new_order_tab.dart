@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shimmer/shimmer.dart';
 import '../services/api_service.dart';
 import 'order_details_screen.dart';
 
@@ -111,6 +112,86 @@ class _NewOrderTabState extends State<NewOrderTab> {
     return spans;
   }
 
+  Widget _buildOrdersShimmer({
+    required double cardPadding,
+    required double cardHeight,
+    required double cardWidth,
+  }) {
+    return ListView.builder(
+      padding: EdgeInsets.all(cardPadding),
+      itemCount: 6,
+      itemBuilder: (_, __) {
+        return Shimmer.fromColors(
+          baseColor: Colors.grey.shade300,
+          highlightColor: Colors.grey.shade100,
+          child: Card(
+            color: const Color(0xFFF6FCFC),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: Container(
+              width: cardWidth,
+              constraints: BoxConstraints(minHeight: cardHeight),
+              padding: EdgeInsets.all(cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: cardWidth * 0.35,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: List.generate(
+                          3,
+                          (i) => Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            width: i == 2 ? 70 : 90,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: List.generate(
+                          3,
+                          (i) => Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            width: i == 0 ? 120 : 95,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredOrders = searchQuery.trim().isEmpty
@@ -147,7 +228,11 @@ class _NewOrderTabState extends State<NewOrderTab> {
             children: [
               Expanded(
                 child: isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? _buildOrdersShimmer(
+                        cardPadding: cardPadding,
+                        cardHeight: cardHeight,
+                        cardWidth: cardWidth,
+                      )
 
                     // ⭐ لا توجد طلبات جديدة
                     : orders.isEmpty
@@ -209,9 +294,7 @@ class _NewOrderTabState extends State<NewOrderTab> {
 
                                         return const Padding(
                                           padding: EdgeInsets.all(16),
-                                          child: Center(
-                                              child:
-                                                  CircularProgressIndicator()),
+                                          child: _LoadMoreShimmer(),
                                         );
                                       }
 
@@ -464,6 +547,28 @@ class _NewOrderTabState extends State<NewOrderTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LoadMoreShimmer extends StatelessWidget {
+  const _LoadMoreShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Center(
+        child: Container(
+          width: 120,
+          height: 12,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
     );
   }
 }

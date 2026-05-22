@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shimmer/shimmer.dart';
 import '../snackBar/snackbar.dart';
 import '../../utils/image_compressor.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -33,6 +34,7 @@ class _UpdateAccountPageState extends State<UpdateAccountPage> {
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _detailsController = TextEditingController();
   List<TextEditingController> phoneControllers = [];
+  bool _isDollarEnabled = false;
 
   // 🖼️ صور
   final ImagePicker _picker = ImagePicker();
@@ -68,11 +70,21 @@ File? avatarImageFile;
   
   final result = await ApiService.getShopById(shopId);
 if (result != null) {
+  bool remoteDollarEnabled = prefs.getBool('isDollarEnabled') ?? false;
+  if (result.containsKey('isDollarEnabled') || result.containsKey('IsDollarEnabled')) {
+    final rawDollar = result['isDollarEnabled'] ?? result['IsDollarEnabled'];
+    remoteDollarEnabled = rawDollar == true ||
+        rawDollar.toString().trim().toLowerCase() == 'true' ||
+        rawDollar.toString().trim() == '1';
+    await prefs.setBool('isDollarEnabled', remoteDollarEnabled);
+  }
+
   setState(() {
     shopData = result;
     _nameController.text = result['shopName'] ?? '';
     _addressController.text = result['address'] ?? '';
     _detailsController.text = result['detailes'] ?? '';
+    _isDollarEnabled = remoteDollarEnabled;
 
     final phones = List<String>.from(result['phoneNumbers'] ?? []);
     phoneControllers =
@@ -609,12 +621,14 @@ Future<void> _saveChanges() async {
     final String oldDetails = (shopData?["detailes"] ?? "").toString();
     final List<String> oldPhones =
         List<String>.from(shopData?["phoneNumbers"] ?? []);
+    final bool oldIsDollarEnabled = shopData?["isDollarEnabled"] == true;
 
     // 🔍 مقارنة التعديلات
     bool noShopChanges =
         newName == oldName &&
         newAddress == oldAddress &&
         newDetails == oldDetails &&
+        _isDollarEnabled == oldIsDollarEnabled &&
         listEquals(newPhones, oldPhones) &&
         coverImageFile == null &&
         avatarImageFile == null;
@@ -643,6 +657,7 @@ Future<void> _saveChanges() async {
         address: newAddress,
         detailes: newDetails,
         phoneNumbers: newPhones,
+        isDollarEnabled: _isDollarEnabled,
         shopImage: coverImageFile,
         shopImage2: avatarImageFile,
       );
@@ -652,6 +667,8 @@ Future<void> _saveChanges() async {
         setState(() => isSaving = false);
         return;
       }
+
+      await prefs.setBool('isDollarEnabled', _isDollarEnabled);
     }
 
     // 👤 حفظ بيانات صاحب المحل
@@ -982,13 +999,64 @@ void _showImageOptions(BuildContext context, int index) {
   );
 }
 
+Widget _buildLoadingShimmer(BuildContext context) {
+  final screenHeight = MediaQuery.of(context).size.height;
+
+  Widget box({
+    required double height,
+    double radius = 12,
+    EdgeInsetsGeometry? margin,
+  }) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.grey.shade100,
+      child: Container(
+        height: height,
+        margin: margin,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(radius),
+        ),
+      ),
+    );
+  }
+
+  return Directionality(
+    textDirection: TextDirection.rtl,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: screenHeight * 0.05),
+          box(height: 120, radius: 24),
+          const SizedBox(height: 16),
+          box(height: 52),
+          const SizedBox(height: 12),
+          box(height: 52),
+          const SizedBox(height: 12),
+          box(height: 82),
+          const SizedBox(height: 12),
+          box(height: 52),
+          const SizedBox(height: 12),
+          box(height: 52),
+          const Spacer(),
+          box(height: 48, radius: 30),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+}
+
 @override
 Widget build(BuildContext context) {
   final screenHeight = MediaQuery.of(context).size.height;
 
   if (isLoading) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: _buildLoadingShimmer(context),
     );
   }
 
@@ -1047,6 +1115,45 @@ Directionality(
       labelText: "الوصف",
       border: OutlineInputBorder(),
     ),
+  ),
+),
+
+const SizedBox(height: 15),
+
+Container(
+  width: double.infinity,
+  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+  decoration: BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: const Color(0xFF5A9BD5), width: 1),
+  ),
+  child: Row(
+    children: [
+      Switch.adaptive(
+        value: _isDollarEnabled,
+        activeColor: const Color(0xFF5A9BD5),
+        onChanged: (value) {
+          setState(() {
+            _isDollarEnabled = value;
+          });
+        },
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          _isDollarEnabled
+              ? "المحل يتعامل بالدولار"
+              : "المحل لا يتعامل بالدولار",
+          textAlign: TextAlign.right,
+          style: const TextStyle(
+            fontFamily: "Tajawal",
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      const Icon(Icons.attach_money, color: Color(0xFF5A9BD5)),
+    ],
   ),
 ),
 

@@ -25,6 +25,21 @@ class OptionsTab extends ConsumerStatefulWidget {
 
 class _OptionsTabState extends ConsumerState<OptionsTab> {
   bool confirming = false;
+  bool _isDollarEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDollarSetting();
+  }
+
+  Future<void> _loadDollarSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _isDollarEnabled = prefs.getBool('isDollarEnabled') ?? false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +124,21 @@ class _OptionsTabState extends ConsumerState<OptionsTab> {
             title: const Text("تعديل الأسعار", textAlign: TextAlign.right, style: TextStyle(fontSize: 22)),
             onTap: () => context.push(AppRoutes.priceAdjustment),
           ),
+
+          if (_isDollarEnabled)
+            ListTile(
+              trailing: const Icon(
+                Icons.currency_exchange,
+                size: 28,
+                color: Colors.black,
+              ),
+              title: const Text(
+                "سعر الصرف",
+                textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 22),
+              ),
+              onTap: () => context.push(AppRoutes.exchangeRate),
+            ),
 
           ListTile(
             trailing: Image.asset("assets/images/customer.png", width: 28, height: 28),

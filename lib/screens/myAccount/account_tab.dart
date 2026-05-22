@@ -43,6 +43,25 @@ class _AccountTabState extends State<AccountTab> {
 
     final result = await ApiService.getShopById(shopId);
 
+    if (result != null) {
+      if (result.containsKey('isDollarEnabled') ||
+          result.containsKey('IsDollarEnabled')) {
+        final rawDollar =
+            result['isDollarEnabled'] ?? result['IsDollarEnabled'];
+        final isDollarEnabled = rawDollar == true ||
+            rawDollar.toString().trim().toLowerCase() == 'true' ||
+            rawDollar.toString().trim() == '1';
+        await prefs.setBool('isDollarEnabled', isDollarEnabled);
+      }
+
+      final rawRate = result['exchangeRate'];
+      final parsedRate =
+          rawRate == null ? null : double.tryParse(rawRate.toString());
+      if (parsedRate != null) {
+        await prefs.setDouble('exchangeRate', parsedRate);
+      }
+    }
+
     if (!mounted) return;
 
     setState(() {

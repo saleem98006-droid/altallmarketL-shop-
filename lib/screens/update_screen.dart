@@ -65,22 +65,26 @@ class OptionalUpdateScreen extends StatelessWidget {
 
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF5A9BD5),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: _openStore,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        side: const BorderSide(color: Color(0xFF5A9BD5), width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
                       ),
-                    ),
-                    onPressed: _openStore,
-                    child: const Text(
-                      "تحديث الآن",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontFamily: "Tajawal",
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                      child: const Text(
+                        "تحديث الآن",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: "Tajawal",
+                          color: Color(0xFF5A9BD5),
+                        ),
                       ),
                     ),
                   ),

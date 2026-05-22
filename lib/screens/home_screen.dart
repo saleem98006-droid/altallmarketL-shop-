@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
 import 'notifications/notifications_page.dart';
 
 // استدعاء التبويبات
@@ -31,7 +32,19 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObserver {
   static const Color kBlue = Color(0xFF5a9bd5);
+  static const String _homeTutorialDoneKey = 'shop_home_tutorial_done_v1';
+  static const bool _showTutorialEveryOpen = false;
   bool get isMiddleActive => selectedIndex == 2;
+
+  final GlobalKey _notificationsKey = GlobalKey();
+  final GlobalKey _homeTabKey = GlobalKey();
+  final GlobalKey _ordersTabKey = GlobalKey();
+  final GlobalKey _newTabKey = GlobalKey();
+  final GlobalKey _accountTabKey = GlobalKey();
+  final GlobalKey _optionsTabKey = GlobalKey();
+
+  TutorialCoachMark? _tutorialCoachMark;
+  bool _isTutorialScheduled = false;
 
   late int selectedIndex;
   bool hasNewOrders = false;
@@ -53,6 +66,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     _checkNewNotifications();
     newOrderNotificationTick.addListener(_handleNewOrderNotificationTick);
     notificationsTick.addListener(_handleNotificationsTick);
+    _maybeStartTutorial();
   }
   
 
@@ -90,10 +104,230 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
 
   @override
   void dispose() {
+    _tutorialCoachMark?.finish();
     WidgetsBinding.instance.removeObserver(this);
     newOrderNotificationTick.removeListener(_handleNewOrderNotificationTick);
     notificationsTick.removeListener(_handleNotificationsTick);
     super.dispose();
+  }
+
+  Future<void> _maybeStartTutorial() async {
+    if (_isTutorialScheduled || !mounted) return;
+    _isTutorialScheduled = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    final wasShown = prefs.getBool(_homeTutorialDoneKey) ?? false;
+    final shouldShow = _showTutorialEveryOpen || !wasShown;
+    if (!shouldShow) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _createTutorial();
+    });
+
+    if (!_showTutorialEveryOpen) {
+      await prefs.setBool(_homeTutorialDoneKey, true);
+    }
+  }
+
+  Widget _buildTutorialMessage({
+    required String title,
+    required String description,
+  }) {
+    return Align(
+      alignment: Alignment.bottomRight,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+                fontFamily: 'Tajawal',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 19,
+                fontWeight: FontWeight.w600,
+                height: 1.45,
+                fontFamily: 'Tajawal',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<TargetFocus> _buildTutorialTargets() {
+    return <TargetFocus>[
+      TargetFocus(
+        identify: 'notifications',
+        keyTarget: _notificationsKey,
+        enableOverlayTab: true,
+        shape: ShapeLightFocus.Circle,
+        radius: 22,
+        paddingFocus: 8,
+        contents: [
+          TargetContent(
+            align: ContentAlign.bottom,
+            builder: (_, __) => _buildTutorialMessage(
+              title: 'الإشعارات',
+              description: 'أي تنبيه مهم للحساب أو الطلبات يظهر هنا',
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: 'home-tab',
+        keyTarget: _homeTabKey,
+        enableOverlayTab: true,
+        shape: ShapeLightFocus.Circle,
+        radius: 20,
+        paddingFocus: 8,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (_, __) => _buildTutorialMessage(
+              title: 'الرئيسية',
+              description: 'واجهة المتجر الرئيسية لعرض المحتوى',
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: 'orders-tab',
+        keyTarget: _ordersTabKey,
+        enableOverlayTab: true,
+        shape: ShapeLightFocus.Circle,
+        radius: 20,
+        paddingFocus: 8,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (_, __) => _buildTutorialMessage(
+              title: 'طلباتي',
+              description: 'هنا تتابع الطلبات الجارية والمكتملة',
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: 'new-orders-tab',
+        keyTarget: _newTabKey,
+        enableOverlayTab: true,
+        shape: ShapeLightFocus.Circle,
+        radius: 30,
+        paddingFocus: 8,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (_, __) => _buildTutorialMessage(
+              title: 'جديد',
+              description: 'هذا الزر يعرض الطلبات الجديدة مباشرة',
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: 'account-tab',
+        keyTarget: _accountTabKey,
+        enableOverlayTab: true,
+        shape: ShapeLightFocus.Circle,
+        radius: 20,
+        paddingFocus: 8,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (_, __) => _buildTutorialMessage(
+              title: 'حسابي',
+              description: 'لإدارة بيانات المحل ومعلومات الحساب',
+            ),
+          ),
+        ],
+      ),
+      TargetFocus(
+        identify: 'options-tab',
+        keyTarget: _optionsTabKey,
+        enableOverlayTab: true,
+        shape: ShapeLightFocus.Circle,
+        radius: 20,
+        paddingFocus: 8,
+        contents: [
+          TargetContent(
+            align: ContentAlign.top,
+            builder: (_, __) => _buildTutorialMessage(
+              title: 'خيارات',
+              description: 'خدمات وإجراءات إضافية خاصة بالمتجر',
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  bool _isTargetReady(GlobalKey key) {
+    final context = key.currentContext;
+    if (context == null) return false;
+
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox) return false;
+
+    return renderObject.attached &&
+        renderObject.hasSize &&
+        renderObject.size.width > 0 &&
+        renderObject.size.height > 0;
+  }
+
+  bool _areTutorialTargetsReady() {
+    return <GlobalKey>[
+      _notificationsKey,
+      _homeTabKey,
+      _ordersTabKey,
+      _newTabKey,
+      _accountTabKey,
+      _optionsTabKey,
+    ].every(_isTargetReady);
+  }
+
+  void _createTutorial({int attempt = 0}) {
+    if (!mounted) return;
+
+    if (!_areTutorialTargetsReady()) {
+      if (attempt < 12) {
+        Future.delayed(
+          const Duration(milliseconds: 250),
+          () => _createTutorial(attempt: attempt + 1),
+        );
+      }
+      return;
+    }
+
+    _tutorialCoachMark = TutorialCoachMark(
+      targets: _buildTutorialTargets(),
+      colorShadow: Colors.black,
+      opacityShadow: 0.82,
+      hideSkip: true,
+      pulseEnable: true,
+      pulseAnimationDuration: const Duration(milliseconds: 700),
+      focusAnimationDuration: const Duration(milliseconds: 450),
+      unFocusAnimationDuration: const Duration(milliseconds: 260),
+    );
+
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+      _tutorialCoachMark?.show(context: context);
+    });
   }
 
   Future<void> _checkNewOrders() async {
@@ -186,6 +420,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     ),
                   ),
                   SizedBox(
+                    key: _notificationsKey,
                     width: 40,
                     height: 40,
                     child: Stack(
@@ -267,7 +502,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                         alignment: Alignment.bottomCenter,
                         child: Container(
                           height: 75,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
                           decoration: const BoxDecoration(
                             color: kBlue,
                             borderRadius: BorderRadius.vertical(
@@ -277,51 +512,128 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              IconButton(
-                                icon: selectedIndex == 4
-                                    ? Image.asset(
-                                        "assets/images/options2.png",
-                                        height: 28,
-                                        color: Colors.white,
-                                      )
-                                    : Image.asset(
-                                        "assets/images/options1.png",
-                                        height: 28,
+                              Expanded(
+                                child: InkWell(
+                                  key: _optionsTabKey,
+                                  onTap: () => _selectIndex(4),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const SizedBox(height: 6),
+                                      Image.asset(
+                                        selectedIndex == 4
+                                            ? "assets/images/options2.png"
+                                            : "assets/images/options1.png",
+                                        height: 26,
                                         color: Colors.white,
                                       ),
-                                onPressed: () => _selectIndex(4),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "خيارات",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: selectedIndex == 4
+                                              ? FontWeight.bold
+                                              : FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            IconButton(
-                              icon: Image.asset(
-                                selectedIndex == 3
-                                    ? "assets/images/myAccount2.png"
-                                    : "assets/images/myAccount1.png",
-                                height: 28,
+                              Expanded(
+                                child: InkWell(
+                                  key: _accountTabKey,
+                                  onTap: () => _selectIndex(3),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const SizedBox(height: 6),
+                                      Image.asset(
+                                        selectedIndex == 3
+                                            ? "assets/images/myAccount2.png"
+                                            : "assets/images/myAccount1.png",
+                                        height: 26,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "حسابي",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: selectedIndex == 3
+                                              ? FontWeight.bold
+                                              : FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              onPressed: () => _selectIndex(3),
-                            ),
-
-                            const SizedBox(width: 55),
-
-                            IconButton(
-                              icon: Image.asset(
-                                selectedIndex == 1
-                                    ? "assets/images/order2.png"
-                                    : "assets/images/order1.png",
-                                height: 28,
+                              const SizedBox(width: 80),
+                              Expanded(
+                                child: InkWell(
+                                  key: _ordersTabKey,
+                                  onTap: () => _selectIndex(1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const SizedBox(height: 6),
+                                      Image.asset(
+                                        selectedIndex == 1
+                                            ? "assets/images/order2.png"
+                                            : "assets/images/order1.png",
+                                        height: 26,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "طلباتي",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: selectedIndex == 1
+                                              ? FontWeight.bold
+                                              : FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              onPressed: () => _selectIndex(1),
-                            ),
-
-                            IconButton(
-                              icon: Image.asset(
-                                selectedIndex == 0
-                                    ? "assets/images/home2.png"
-                                    : "assets/images/home1.png",
-                                height: 28,
+                              Expanded(
+                                child: InkWell(
+                                  key: _homeTabKey,
+                                  onTap: () => _selectIndex(0),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const SizedBox(height: 6),
+                                      Image.asset(
+                                        selectedIndex == 0
+                                            ? "assets/images/home2.png"
+                                            : "assets/images/home1.png",
+                                        height: 26,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "الرئيسية",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: selectedIndex == 0
+                                              ? FontWeight.bold
+                                              : FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              onPressed: () => _selectIndex(0),
-                            ),
                             ],
                           ),
                         ),
@@ -329,60 +641,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     ),
 
                     Positioned(
-                      bottom: 20,
+                      bottom: 10,
                       left: 0,
                       right: 0,
                       child: Center(
-                        child: GestureDetector(
-                          onTap: () => _selectIndex(2),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 300),
-                            transitionBuilder: (child, animation) =>
-                                ScaleTransition(scale: animation, child: child),
-                            child: selectedIndex == 2
-                                ? Container(
-                                    key: const ValueKey("big"),
-                                    width: 85,
-                                    height: 85,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.white,
-                                      border: Border.all(
-                                        color: hasNewOrders ? Colors.red : kBlue,
-                                        width: 5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.25),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 6),
+                        child: Column(
+                          key: _newTabKey,
+                          children: [
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              transitionBuilder: (child, animation) =>
+                                  ScaleTransition(scale: animation, child: child),
+                              child: selectedIndex == 2
+                                  ? Container(
+                                      key: const ValueKey("big"),
+                                      width: 85,
+                                      height: 85,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                        border: Border.all(
+                                          color: hasNewOrders ? Colors.red : kBlue,
+                                          width: 5,
                                         ),
-                                      ],
-                                    ),
-                                    child: Center(
-                                      child: Image.asset(
-                                        "assets/images/fast_cart.png",
-                                        color: kBlue,
-                                        height: 35,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.25),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 6),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Center(
+                                        child: Image.asset(
+                                          "assets/images/fast_cart.png",
+                                          color: kBlue,
+                                          height: 35,
+                                        ),
+                                      ),
+                                    )
+                                  : InkWell(
+                                      key: const ValueKey("small"),
+                                      onTap: () => _selectIndex(2),
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: Container(
+                                        width: 30,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: kBlue,
+                                          border: Border.all(
+                                            color: hasNewOrders
+                                                ? Colors.red
+                                                : Colors.white,
+                                            width: 3,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  )
-                                : Container(
-                                    key: const ValueKey("small"),
-                                    width: 35,
-                                    height: 35,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: kBlue,
-                                      border: Border.all(
-                                        color: hasNewOrders
-                                            ? Colors.red
-                                            : Colors.white,
-                                        width: 4,
-                                      ),
-                                    ),
-                                  ),
-                          ),
+                            ),
+                            const SizedBox(height: 6),
+                            if (selectedIndex != 2)
+                              const Text(
+                                "جديد",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),

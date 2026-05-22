@@ -19,6 +19,9 @@ class _PriceAdjustmentScreenState extends State<PriceAdjustmentScreen> {
   List<Map<String, dynamic>> filteredProducts = [];
   List sections = []; // 🗂️ الأقسام مع المنتجات
   final Map<int, TextEditingController> priceControllers = {};
+  final Map<int, TextEditingController> priceUsdControllers = {};
+  bool _isDollarEnabled = false;
+  String _selectedCurrency = 'SYP'; // SYP | USD
   bool isLoading = true;
   bool isSaving = false;
 
@@ -39,17 +42,113 @@ class _PriceAdjustmentScreenState extends State<PriceAdjustmentScreen> {
         .replaceAll(' ', '');
   }
 
-  int? _parsePriceInput(String raw) {
+  double? _parseNumberInput(String raw) {
     final normalized = _normalizeDigits(raw);
     if (normalized.isEmpty) return null;
+    return double.tryParse(normalized);
+  }
 
-    final asInt = int.tryParse(normalized);
-    if (asInt != null) return asInt;
+  String _initialNumberText(dynamic value) {
+    if (value == null) return '';
+    if (value is num) {
+      return value == value.toInt() ? value.toInt().toString() : value.toString();
+    }
+    return value.toString();
+  }
 
-    final asDouble = double.tryParse(normalized);
-    if (asDouble == null) return null;
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
 
-    return asDouble.toInt();
+  String _fieldHint(bool isUsd) => isUsd ? '\$' : 'ل.س';
+
+  Widget _priceInputField({
+    required TextEditingController controller,
+    required bool isUsd,
+  }) {
+    return SizedBox(
+      width: 66,
+      child: TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textAlign: TextAlign.left,
+        textAlignVertical: TextAlignVertical.center,
+        style: const TextStyle(
+          color: Color(0xFF5A9BD5),
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          height: 1.0,
+        ),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          hintText: _fieldHint(isUsd),
+          hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
+          border: const UnderlineInputBorder(),
+          enabledBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: Colors.grey, width: 0),
+          ),
+          focusedBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: Color(0xFF5A9BD5), width: 2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPriceEditors(Map<String, dynamic> product) {
+    final productId = product['productId'] as int;
+    final sypController =
+        priceControllers[productId] ?? TextEditingController();
+    final usdController =
+        priceUsdControllers[productId] ?? TextEditingController();
+
+    final useUsd = _isDollarEnabled && _selectedCurrency == 'USD';
+    final controller = useUsd ? usdController : sypController;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 30),
+      child: _priceInputField(controller: controller, isUsd: useUsd),
+    );
+  }
+
+  Widget _buildCurrencyFilter() {
+    if (!_isDollarEnabled) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text("دولار"),
+          Radio<String>(
+            value: 'USD',
+            groupValue: _selectedCurrency,
+            activeColor: const Color(0xFF5A9BD5),
+            onChanged: (val) {
+              if (val == null) return;
+              setState(() {
+                _selectedCurrency = val;
+              });
+            },
+          ),
+          const Text("سوري"),
+          Radio<String>(
+            value: 'SYP',
+            groupValue: _selectedCurrency,
+            activeColor: const Color(0xFF5A9BD5),
+            onChanged: (val) {
+              if (val == null) return;
+              setState(() {
+                _selectedCurrency = val;
+              });
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _shimmerBox({
@@ -117,9 +216,34 @@ class _PriceAdjustmentScreenState extends State<PriceAdjustmentScreen> {
     _loadProducts();
   }
 
+  @override
+  void dispose() {
+    for (final c in priceControllers.values) {
+      c.dispose();
+    }
+    for (final c in priceUsdControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _loadProducts() async {
     final prefs = await SharedPreferences.getInstance();
     final shopId = prefs.getInt('shopId') ?? 0;
+
+    var isDollarEnabled = prefs.getBool('isDollarEnabled') ?? false;
+    if (shopId > 0) {
+      final shopData = await ApiService.getShopById(shopId);
+      if (shopData != null &&
+          (shopData.containsKey('isDollarEnabled') ||
+              shopData.containsKey('IsDollarEnabled'))) {
+        final raw = shopData['isDollarEnabled'] ?? shopData['IsDollarEnabled'];
+        isDollarEnabled = raw == true ||
+            raw.toString().trim().toLowerCase() == 'true' ||
+            raw.toString().trim() == '1';
+        await prefs.setBool('isDollarEnabled', isDollarEnabled);
+      }
+    }
 
     setState(() => isLoading = true);
 
@@ -128,11 +252,18 @@ class _PriceAdjustmentScreenState extends State<PriceAdjustmentScreen> {
       final result = await ApiService.getProductsByShop(shopId);
       if (result != null) {
         setState(() {
+          _isDollarEnabled = isDollarEnabled;
           allProducts = result;
           filteredProducts = result;
           for (var p in allProducts) {
             priceControllers[p['productId']] =
-                TextEditingController(text: p['price'].toString());
+                TextEditingController(text: _initialNumberText(p['price']));
+            priceUsdControllers[p['productId']] = TextEditingController(
+              text: _initialNumberText(p['priceUSD']),
+            );
+          }
+          if (!_isDollarEnabled) {
+            _selectedCurrency = 'SYP';
           }
           isLoading = false;
         });
@@ -142,12 +273,19 @@ class _PriceAdjustmentScreenState extends State<PriceAdjustmentScreen> {
       final result = await ApiService.getSectionsWithProductsLite(shopId);
       if (result != null) {
         setState(() {
+          _isDollarEnabled = isDollarEnabled;
           sections = result['sections'];
           for (var s in sections) {
             for (var p in s['products']) {
               priceControllers[p['productId']] =
-                  TextEditingController(text: p['price'].toString());
+                  TextEditingController(text: _initialNumberText(p['price']));
+              priceUsdControllers[p['productId']] = TextEditingController(
+                text: _initialNumberText(p['priceUSD']),
+              );
             }
+          }
+          if (!_isDollarEnabled) {
+            _selectedCurrency = 'SYP';
           }
           isLoading = false;
         });
@@ -204,21 +342,59 @@ class _PriceAdjustmentScreenState extends State<PriceAdjustmentScreen> {
 
   Future<void> processItem(Map<String, dynamic> p) async {
     final productId = p['productId'];
-    final controller = priceControllers[productId];
-    if (controller == null) return;
+    final sypController = priceControllers[productId];
+    final usdController = priceUsdControllers[productId];
+    if (sypController == null) return;
 
-    final parsedPrice = _parsePriceInput(controller.text);
-    if (parsedPrice == null) {
-      hasInvalidInput = true;
-      return;
+    final bool editUsd = _isDollarEnabled && _selectedCurrency == 'USD';
+
+    double? parsedPrice;
+    if (!editUsd) {
+      parsedPrice = _parseNumberInput(sypController.text);
+      if (parsedPrice == null || parsedPrice <= 0) {
+        hasInvalidInput = true;
+        return;
+      }
     }
 
-    final oldPrice = (p['price'] as num).toInt();
-    if (parsedPrice != oldPrice) {
+    final oldUsd = _toDouble(p['priceUSD']);
+    final oldPrice = _toDouble(p['price']) ?? 0;
+
+    double? effectiveUsd = oldUsd;
+    if (editUsd) {
+      final typedUsd = _parseNumberInput(usdController?.text ?? '');
+      if (typedUsd == null || typedUsd <= 0) {
+        hasInvalidInput = true;
+        return;
+      }
+      effectiveUsd = typedUsd;
+    } else if (!_isDollarEnabled) {
+      effectiveUsd = null;
+    }
+
+    final effectiveSyp = parsedPrice ?? oldPrice;
+
+    final isSypChanged = !editUsd && (effectiveSyp != oldPrice);
+    final isUsdChanged = _isDollarEnabled && (effectiveUsd != oldUsd);
+
+    if (isSypChanged || isUsdChanged) {
       changedCount++;
-      final res = await ApiService.updateProductPrice(productId, parsedPrice);
+      final res = await ApiService.updateProductPrice(
+        productId,
+        price: editUsd ? null : effectiveSyp,
+        priceUSD: _isDollarEnabled ? effectiveUsd : null,
+      );
       if (res != null && res['success'] == true) {
-        p['price'] = parsedPrice;
+        p['price'] = res['newPrice'] ?? effectiveSyp;
+        p['priceUSD'] = _isDollarEnabled ? (res['newPriceUSD'] ?? effectiveUsd) : null;
+
+        priceControllers[productId]?.text =
+            _initialNumberText(p['price']);
+        if (_isDollarEnabled) {
+          priceUsdControllers[productId]?.text =
+              _initialNumberText(p['priceUSD']);
+        }
+
         updated = true;
       }
     }
@@ -291,6 +467,8 @@ Widget build(BuildContext context) {
         ),
 
         const SizedBox(height: 16),
+
+        _buildCurrencyFilter(),
 
         // ✅ خيارات الكل / حسب التصنيف (Radio بدلاً من Checkbox)
         Row(
@@ -376,31 +554,7 @@ Widget build(BuildContext context) {
 ),
 
           // 👈 السعر على اليمين + مسافة من اليمين
-         Padding(
-  padding: const EdgeInsets.only(right: 30),
-  child: SizedBox(
-    width: 60,
-    child: TextField(
-      controller: priceControllers[p['productId']],
-      keyboardType: TextInputType.number,
-      textAlign: TextAlign.left,
-      style: const TextStyle(
-        color: Color(0xFF5A9BD5),   // ← لون النص الأزرق
-        fontSize: 16,         // اختياري
-        fontWeight: FontWeight.w600, // اختياري
-      ),
-      decoration: const InputDecoration(
-        border: UnderlineInputBorder(),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey, width: 0),
-        ),
-        focusedBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: Color(0xFF5A9BD5), width: 2),
-        ),
-      ),
-    ),
-  ),
-),
+         _buildPriceEditors(p),
         ],
       ),
     );
@@ -452,35 +606,7 @@ Widget build(BuildContext context) {
         ),
 
         // 👈 السعر على اليمين + مسافة من اليمين
-       Padding(
-  padding: const EdgeInsets.only(right: 30),
-  child: SizedBox(
-    width: 60,
-    child: TextField(
-  controller: priceControllers[p['productId']],
-  keyboardType: TextInputType.number,
-  textAlign: TextAlign.left,
-  textAlignVertical: TextAlignVertical.center, // محاذاة عمودية مثالية
-  style: const TextStyle(
-    color: Color(0xFF5A9BD5),   // لون النص الأزرق
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    height: 1.0,                // يجعل النص على السطر تمامًا
-  ),
-  decoration: const InputDecoration(
-    isDense: true, // يقلل الارتفاع الافتراضي
-    contentPadding: EdgeInsets.symmetric(vertical: 8), // ضبط الارتفاع
-    border: UnderlineInputBorder(),
-    enabledBorder: UnderlineInputBorder(
-      borderSide: BorderSide(color: Colors.grey, width: 0),
-    ),
-    focusedBorder: UnderlineInputBorder(
-      borderSide: BorderSide(color: Color(0xFF5A9BD5), width: 2),
-    ),
-  ),
-),
-  ),
-),
+       _buildPriceEditors(p),
       ],
     ),
   );

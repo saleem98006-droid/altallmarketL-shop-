@@ -28,6 +28,7 @@ import '../screens/options/edit_job_vacancy_screen.dart';
 import '../screens/options/customer_withdrawals_details_screen.dart';
 import '../screens/options/monthly_dues_screen.dart';
 import '../screens/options/add_slider_screen.dart';
+import '../screens/options/exchange_rate_screen.dart';
 import '../screens/product_detail_screen.dart';
 import '../screens/edit_product_screen.dart';
 import '../screens/offer_detail_screen.dart';
@@ -64,6 +65,7 @@ class AppRoutes {
   static const String editJobVacancy = '/edit-job-vacancy';
   static const String customerWithdrawalsDetails = '/customer-withdrawals-details';
   static const String monthlyDues = '/monthly-dues';
+  static const String exchangeRate = '/exchange-rate';
   static const String addSlider = '/add-slider';
   static const String productDetail = '/product-detail';
   static const String editProduct = '/edit-product';
@@ -258,6 +260,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.monthlyDues,
         name: 'monthly-dues',
         builder: (context, state) => const MonthlyDuesScreen(),
+      ),
+
+      GoRoute(
+        path: AppRoutes.exchangeRate,
+        name: 'exchange-rate',
+        builder: (context, state) => const ExchangeRateScreen(),
       ),
 
       GoRoute(

@@ -26,12 +26,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
   // Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _priceUsdController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
 
   // FocusNodes
   final FocusNode _nameFocus = FocusNode();
   final FocusNode _priceFocus = FocusNode();
+  final FocusNode _priceUsdFocus = FocusNode();
   final FocusNode _descFocus = FocusNode();
+
+  bool _isDollarEnabled = false;
 
   // 🟢 فقط سويتش الإشعار
   bool notify = false;
@@ -49,12 +53,48 @@ class _AddProductScreenState extends State<AddProductScreen> {
   String? selectedSectionName;
 
   @override
+  void initState() {
+    super.initState();
+    _loadShopCurrencySettings();
+  }
+
+  Future<void> _loadShopCurrencySettings() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    bool isDollarEnabled = prefs.getBool('isDollarEnabled') ?? false;
+    final shopId = prefs.getInt('shopId') ?? 0;
+
+    // ✅ إذا لم تكن القيمة محفوظة/محدّثة محلياً، نجلبها من السيرفر
+    if (shopId > 0) {
+      final shopData = await ApiService.getShopById(shopId);
+      if (shopData != null) {
+        if (shopData.containsKey('isDollarEnabled') ||
+            shopData.containsKey('IsDollarEnabled')) {
+          final rawDollar =
+              shopData['isDollarEnabled'] ?? shopData['IsDollarEnabled'];
+          isDollarEnabled = rawDollar == true ||
+              rawDollar.toString().trim().toLowerCase() == 'true' ||
+              rawDollar.toString().trim() == '1';
+          await prefs.setBool('isDollarEnabled', isDollarEnabled);
+        }
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isDollarEnabled = isDollarEnabled;
+    });
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _priceController.dispose();
+    _priceUsdController.dispose();
     _descController.dispose();
     _nameFocus.dispose();
     _priceFocus.dispose();
+    _priceUsdFocus.dispose();
     _descFocus.dispose();
     super.dispose();
   }
@@ -161,6 +201,8 @@ Future<void> _saveProduct() async {
 
   final prefs = await SharedPreferences.getInstance();
   final shopId = prefs.getInt('shopId') ?? 0;
+  final areaId = prefs.getInt('areaID') ?? prefs.getInt('areaId') ?? 0;
+  final isDollarEnabled = prefs.getBool('isDollarEnabled') ?? _isDollarEnabled;
 
   if (shopId == 0) {
     snackBar(context, "لا يوجد انترنت اعد المحاولة");
@@ -174,15 +216,34 @@ Future<void> _saveProduct() async {
     return;
   }
 
-  final price = double.tryParse(_priceController.text);
-  if (price == null || price <= 0) {
-    snackBar(context, "الرجاء ادخال سعر صحيح");
+  final String sypText = _priceController.text.trim();
+  final String usdText = _priceUsdController.text.trim();
+
+  final double? priceSyp = sypText.isEmpty ? null : double.tryParse(sypText);
+  final double? priceUsd = usdText.isEmpty ? null : double.tryParse(usdText);
+
+  if (isDollarEnabled) {
+    if (priceSyp == null && priceUsd == null) {
+      snackBar(context, "يجب إدخال سعر واحد على الأقل (سوري أو دولار)");
+      setState(() => isSaving = false);
+      return;
+    }
+  } else {
+    if (priceSyp == null || priceSyp <= 0) {
+      snackBar(context, "الرجاء إدخال السعر بالليرة السورية بشكل صحيح");
+      setState(() => isSaving = false);
+      return;
+    }
+  }
+
+  if (priceSyp != null && priceSyp <= 0) {
+    snackBar(context, "السعر بالليرة يجب أن يكون أكبر من الصفر");
     setState(() => isSaving = false);
     return;
   }
 
-  if (price.toString().replaceAll('.', '').length > 9) {
-    snackBar(context, "السعر غير صحيح");
+  if (priceUsd != null && priceUsd <= 0) {
+    snackBar(context, "السعر بالدولار يجب أن يكون أكبر من الصفر");
     setState(() => isSaving = false);
     return;
   }
@@ -199,6 +260,7 @@ final compressedImage3 = await ImageCompressor.compressFile(selectedImages[2]);
     _nameController.text.trim(),
     _descController.text.trim(),
     _priceController.text.trim(),
+    _priceUsdController.text.trim(),
     selectedSectionId,
     imagePaths,
   ].join('||');
@@ -219,7 +281,8 @@ final compressedImage3 = await ImageCompressor.compressFile(selectedImages[2]);
     "shopId": shopId,
     "productName": _nameController.text.trim(),
     "description": _descController.text.trim(),
-    "price": price,
+    if (priceSyp != null) "price": priceSyp,
+    if (priceUsd != null) "priceUSD": priceUsd,
     "sectionId": selectedSectionId,
     "image": compressedImage1,
     "image2": compressedImage2,
@@ -246,6 +309,7 @@ setState(() {
   _nameController.clear();
   _descController.clear();
   _priceController.clear();
+  _priceUsdController.clear();
 
   selectedSectionId = null;
   selectedSectionName = null;
@@ -266,6 +330,7 @@ return;
         "fromProductPage": true,
         "productName": _nameController.text.trim(),
         "senderId": shopId,
+        "areaId": areaId,
         "relatedEntity": "Product",
         "relatedId": productId,
       };
@@ -515,10 +580,24 @@ Widget build(BuildContext context) {
             // ✅ إدخال السعر
             TextField(
               controller: _priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "السعر"),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  const InputDecoration(labelText: "السعر بالليرة السورية"),
             ),
             const SizedBox(height: 16),
+
+            if (_isDollarEnabled) ...[
+              TextField(
+                controller: _priceUsdController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: "السعر بالدولار (اختياري)",
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // ✅ إدخال الوصف
             TextField(

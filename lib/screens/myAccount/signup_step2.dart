@@ -28,11 +28,21 @@ class _SignupStep2State extends State<SignupStep2> {
 
   double? selectedLat;
   double? selectedLng;
+  bool _isDollarEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _loadDraftValues();
+  }
+
+  Future<void> _loadDraftValues() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _isDollarEnabled = prefs.getBool('isDollarEnabled') ?? false;
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -51,6 +61,7 @@ class _SignupStep2State extends State<SignupStep2> {
     await prefs.setString('address', addressController.text.trim());
     await prefs.setString('detailes', descriptionController.text.trim());
     await prefs.setInt('categoryId', selectedCategory?['categoryId'] ?? 0);
+    await prefs.setBool('isDollarEnabled', _isDollarEnabled);
 
     if (selectedLat != null && selectedLng != null) {
       await prefs.setDouble('latitude', selectedLat!);
@@ -69,6 +80,45 @@ class _SignupStep2State extends State<SignupStep2> {
       labelText: label,
       prefixIcon: Icon(icon, color: isFocused ? Colors.blue : Colors.black54),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
+    );
+  }
+
+  Widget _buildDollarSwitch() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF5A9BD5), width: 1),
+      ),
+      child: Row(
+        children: [
+          Switch.adaptive(
+            value: _isDollarEnabled,
+            activeColor: const Color(0xFF5A9BD5),
+            onChanged: (value) {
+              setState(() {
+                _isDollarEnabled = value;
+              });
+            },
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _isDollarEnabled
+                  ? "المحل يتعامل بالدولار"
+                  : "المحل لا يتعامل بالدولار",
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontFamily: 'Tajawal',
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const Icon(Icons.attach_money, color: Color(0xFF5A9BD5)),
+        ],
+      ),
     );
   }
 
@@ -201,6 +251,9 @@ Widget build(BuildContext context) {
                   decoration: _inputDecoration(
                       "الوصف", Icons.description, descriptionFocus),
                 ),
+                const SizedBox(height: 16),
+
+                _buildDollarSwitch(),
                 const SizedBox(height: 28),
 
                 // ✅ حقول أرقام الهاتف مع زر إضافة

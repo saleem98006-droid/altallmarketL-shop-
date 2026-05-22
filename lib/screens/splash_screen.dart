@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:io';
+import 'dart:async';
 import '../services/api_service.dart';
 import 'snackBar/snackbar.dart';
 import '../providers/router_provider.dart';
@@ -15,43 +15,58 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  late VideoPlayerController _controller;
   bool _hasShownNoInternetMessage = false;
   bool _isCheckingLogin = false;
   bool _hasNavigated = false;
   bool _minimumSplashElapsed = false;
   bool _retryScheduled = false;
+  int _currentStage = 0;
+  int _dotPhase = 0;
   String? _pendingRoute;
-  static const String currentAppVersion = "1.0.1";
+  Timer? _dotsTimer;
+  static const Duration _minimumSplashDuration = Duration(seconds: 4);
+  static const List<String> _stages = <String>[
+    'تهيئة التطبيق',
+    'فحص التحديثات',
+    'التحقق من الحساب',
+    'تحديد حالة المتجر',
+    'الانتقال للواجهة',
+  ];
+  static const String currentAppVersion = "1.0.2";
   static const String appKey = "shop";
   String _updateUrl = 'https://altallmarketshop.carrd.co';
 
   @override
   void initState() {
     super.initState();
+    _startDotsAnimation();
+    _setStage(0);
 
-    _controller = VideoPlayerController.asset("assets/videos/splash.mp4")
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() {});
-        _controller.play();
-        _controller.setLooping(false);
-      }).catchError((_) {
-        // تجاهل خطأ الفيديو حتى لا يعطل الدخول
-      });
-
-    // ⏱️ مدة شاشة البداية ثابتة 5 ثوانٍ
-    Future.delayed(const Duration(seconds: 5), () {
+    Future.delayed(_minimumSplashDuration, () {
       if (!mounted) return;
       _minimumSplashElapsed = true;
-      if (_controller.value.isInitialized) {
-        _controller.pause();
-      }
       _tryNavigate();
     });
 
-    // ✅ ابدأ كل التحققات أثناء تشغيل الفيديو
+    // ✅ ابدأ كل التحققات أثناء عرض الصورة
     _checkLoginStatus();
+  }
+
+  void _startDotsAnimation() {
+    _dotsTimer = Timer.periodic(const Duration(milliseconds: 320), (_) {
+      if (!mounted) return;
+      setState(() {
+        _dotPhase = (_dotPhase + 1) % 3;
+      });
+    });
+  }
+
+  void _setStage(int index) {
+    if (!mounted) return;
+    if (_currentStage == index) return;
+    setState(() {
+      _currentStage = index;
+    });
   }
 
   void _retryCheck() {
@@ -68,18 +83,21 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkLoginStatus() async {
     if (_isCheckingLogin || _hasNavigated) return;
     _isCheckingLogin = true;
+    _setStage(1);
 
     final mustUpdate = await _shouldForceUpdate();
     if (mustUpdate) {
       _pendingRoute =
           '${AppRoutes.update}?url=${Uri.encodeComponent(_updateUrl)}';
       _isCheckingLogin = false;
+      _setStage(4);
       _tryNavigate();
       return;
     }
 
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString('phoneNumber');
+    _setStage(2);
 
     if (!mounted) {
       _isCheckingLogin = false;
@@ -89,6 +107,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (phone == null || phone.isEmpty) {
       _pendingRoute = AppRoutes.login;
       _isCheckingLogin = false;
+      _setStage(4);
       _tryNavigate();
       return;
     }
@@ -103,6 +122,7 @@ class _SplashScreenState extends State<SplashScreen> {
         snackBar(context, "لا يوجد اتصال بالإنترنت");
       }
       _isCheckingLogin = false;
+      _setStage(2);
       _retryCheck(); // ← إعادة المحاولة كل 3 ثوانٍ
       return;
     }
@@ -111,15 +131,25 @@ class _SplashScreenState extends State<SplashScreen> {
     if (status["success"] == false) {
       _pendingRoute = AppRoutes.login;
       _isCheckingLogin = false;
+      _setStage(4);
       _tryNavigate();
       return;
     }
 
     final data = status["data"];
+    if (data is Map) {
+      final prefs = await SharedPreferences.getInstance();
+      final areaId = _readAreaId(data);
+      if (areaId != null && areaId > 0) {
+        await prefs.setInt('areaID', areaId);
+      }
+    }
+    _setStage(3);
 
     if (data['shopId'] == null) {
       _pendingRoute = AppRoutes.signupStep2;
       _isCheckingLogin = false;
+      _setStage(4);
       _tryNavigate();
       return;
     }
@@ -138,6 +168,7 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     _isCheckingLogin = false;
+    _setStage(4);
     _tryNavigate();
   }
 
@@ -239,27 +270,87 @@ class _SplashScreenState extends State<SplashScreen> {
     return false;
   }
 
+  int? _readAreaId(dynamic source) {
+    if (source is! Map) return null;
+    final raw = source['areaId'] ??
+        source['areaID'] ??
+        source['AreaID'] ??
+        source['AreaId'];
+    if (raw == null) return null;
+    return raw is int ? raw : int.tryParse(raw.toString());
+  }
+
   @override
   void dispose() {
-    _controller.dispose();
+    _dotsTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stageText = _stages[_currentStage.clamp(0, _stages.length - 1)];
+
     return Scaffold(
-      body: _controller.value.isInitialized
-          ? SizedBox.expand(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _controller.value.size.width,
-                  height: _controller.value.size.height,
-                  child: VideoPlayer(_controller),
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/splash.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Align(
+                alignment: const Alignment(0, 0.55),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(3, (index) {
+                          final active = index == _dotPhase;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            margin: const EdgeInsets.symmetric(horizontal: 5),
+                            width: active ? 20 : 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? const Color(0xFF1E88E5)
+                                  : const Color(0xFFD7E3F3),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 14),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 260),
+                        transitionBuilder: (child, animation) =>
+                            FadeTransition(opacity: animation, child: child),
+                        child: Text(
+                          stageText,
+                          key: ValueKey<int>(_currentStage),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: const Color(0xFF4D5B6A),
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Tajawal',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            )
-          : Container(color: Colors.black),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

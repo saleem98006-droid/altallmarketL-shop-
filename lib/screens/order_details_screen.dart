@@ -4,6 +4,8 @@ import '../services/api_service.dart';
 import 'shop_order_items_list.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'snackBar/snackbar.dart';
 import '../core/app_events.dart';
 import '../widgets/loading_dots_widget.dart';
@@ -67,6 +69,75 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 bool isDeliverLoading = false;
 bool isRejectLoading = false;
 bool canEdit = false;
+
+  Widget _buildLoadingShimmer() {
+    Widget line(double width, {double height = 12}) {
+      return Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+        ),
+      );
+    }
+
+    return Scaffold(
+      body: SafeArea(
+        child: Shimmer.fromColors(
+          baseColor: Colors.grey.shade300,
+          highlightColor: Colors.grey.shade100,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                line(170, height: 20),
+                const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: line(130, height: 16),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: 5,
+                    itemBuilder: (_, __) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF6FCFC),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            line(120),
+                            const SizedBox(height: 10),
+                            line(double.infinity),
+                            const SizedBox(height: 8),
+                            line(180),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: line(double.infinity, height: 44)),
+                    const SizedBox(width: 12),
+                    Expanded(child: line(double.infinity, height: 44)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   // 🔵 كاش تفاصيل عناصر الطلب حسب shopOrderID
   static final Map<int, List<dynamic>> _orderItemsCache = {};
@@ -178,6 +249,14 @@ Future<void> _updateItemQuantity(int shopOrderItemId, int newQty) async {
 }
 
  Future<void> _updateStatus(String status) async {
+  final prefs = await SharedPreferences.getInstance();
+  int? areaId = prefs.getInt('areaID');
+  areaId ??= int.tryParse((prefs.getString('areaID') ?? '').trim());
+  if (areaId == null || areaId <= 0) {
+    snackBar(context, "تعذر قراءة المنطقة، أعد تسجيل الدخول");
+    return;
+  }
+
   // تشغيل حالة التحميل حسب نوع الزر
   setState(() {
     if (status == "قيد التعبئة") {
@@ -190,7 +269,11 @@ Future<void> _updateItemQuantity(int shopOrderItemId, int newQty) async {
   });
 
   // استدعاء API
-  final result = await ApiService.updateOrderStatus(widget.shopOrderID, status);
+  final result = await ApiService.updateOrderStatus(
+    widget.shopOrderID,
+    status,
+    areaId,
+  );
  
   if (!mounted) return;
 
@@ -347,9 +430,7 @@ AppEvents().emit("refresh_orders");
 @override
 Widget build(BuildContext context) {
   if (isLoading) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return _buildLoadingShimmer();
   }
 
   if (items.isEmpty) {

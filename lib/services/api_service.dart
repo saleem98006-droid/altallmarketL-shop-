@@ -467,6 +467,20 @@ static Future<Map<String, dynamic>?> getShopById(int shopId) async {
         data["phoneNumbers"] = <String>[];
       }
 
+        // 🟢 حقول الدولار (مع fallback بين صيغ المفاتيح)
+        final hasDollarKey =
+          data.containsKey("isDollarEnabled") || data.containsKey("IsDollarEnabled");
+        final rawDollar = data["isDollarEnabled"] ?? data["IsDollarEnabled"];
+      final rawRate = data["exchangeRate"] ?? data["ExchangeRate"];
+
+        if (hasDollarKey) {
+        data["isDollarEnabled"] = rawDollar == true ||
+          rawDollar.toString().trim().toLowerCase() == 'true' ||
+          rawDollar.toString().trim() == '1';
+        }
+      data["exchangeRate"] =
+          rawRate == null ? null : double.tryParse(rawRate.toString());
+
       return data;
     }
 
@@ -486,6 +500,7 @@ static Future<Map<String, dynamic>?> updateShop({
   File? shopImage,
   File? shopImage2,
   List<String>? phoneNumbers,
+  bool? isDollarEnabled,
 }) async {
   try {
     final dio = DioService.instance;
@@ -495,6 +510,7 @@ static Future<Map<String, dynamic>?> updateShop({
       if (shopName != null) "shopName": shopName,
       if (address != null) "address": address,
       if (detailes != null) "detailes": detailes,
+      if (isDollarEnabled != null) "isDollarEnabled": isDollarEnabled,
 
       // 🟢 إرسال أرقام الهواتف كـ JSON string
       "phoneNumbersJson": phoneNumbers != null
@@ -541,6 +557,31 @@ static Future<Map<String, dynamic>?> updateShop({
       "message": "خطأ أثناء الاتصال بالسيرفر"
     };
   }
+}
+
+// 💵 جلب/تعديل سعر الصرف للمحل
+static Future<Map<String, dynamic>?> getOrUpdateExchangeRate({
+  required int shopId,
+  double? newExchangeRate,
+}) async {
+  final url = Uri.parse('${ApiConfig.baseUrl}/shops/exchangeRate');
+
+  final body = <String, dynamic>{
+    "shopId": shopId,
+    if (newExchangeRate != null) "newExchangeRate": newExchangeRate,
+  };
+
+  final response = await DioTransport.post(
+    url,
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode(body),
+  );
+
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  return null;
 }
 
 // 🟣 تعديل أوقات الدوام
@@ -677,16 +718,30 @@ static Future<List<dynamic>?> getShopHours(int shopId) async {
   // 🔍 التحقق من وجود محل مرتبط بصاحب المحل
   static Future<bool> checkShopExistsByOwnerId(String ownerId) async {
     final url = Uri.parse('${ApiConfig.baseUrl}/shops?ownerId=$ownerId');
-    final response = await DioTransport.get(url);
+    try {
+      final response = await DioTransport.get(url);
 
-    print('🔍 Checking shop for ownerId: $ownerId');
-    print('📦 Status: ${response.statusCode}');
-    print('📦 Body: ${response.body}');
+      print('🔍 Checking shop for ownerId: $ownerId');
+      print('📦 Status: ${response.statusCode}');
+      print('📦 Body: ${response.body}');
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data != null && data.isNotEmpty; // ← تأكدي من شكل الرد
-    } else {
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data != null && data.isNotEmpty;
+      }
+
+      return false;
+    } on DioException catch (e) {
+      print('⚠️ checkShopExistsByOwnerId DioException: $e');
+      return false;
+    } on SocketException catch (e) {
+      print('⚠️ checkShopExistsByOwnerId SocketException: $e');
+      return false;
+    } on HttpException catch (e) {
+      print('⚠️ checkShopExistsByOwnerId HttpException: $e');
+      return false;
+    } catch (e) {
+      print('⚠️ checkShopExistsByOwnerId error: $e');
       return false;
     }
   }
@@ -770,33 +825,36 @@ static Future<bool> updateProduct(
 }) async {
   try {
     final dio = DioService.instance;
+    final payload = Map<String, dynamic>.from(data);
 
     // 🔥 تنظيف القيم قبل إرسالها
-    data["imageUrl1"] =
-        (data["imageUrl1"] == null || data["imageUrl1"].toString().trim().isEmpty)
+    payload["imageUrl1"] =
+        (payload["imageUrl1"] == null || payload["imageUrl1"].toString().trim().isEmpty)
             ? null
-            : data["imageUrl1"];
+            : payload["imageUrl1"];
 
-    data["imageUrl2"] =
-        (data["imageUrl2"] == null || data["imageUrl2"].toString().trim().isEmpty)
+    payload["imageUrl2"] =
+        (payload["imageUrl2"] == null || payload["imageUrl2"].toString().trim().isEmpty)
             ? null
-            : data["imageUrl2"];
+            : payload["imageUrl2"];
 
-    data["imageUrl3"] =
-        (data["imageUrl3"] == null || data["imageUrl3"].toString().trim().isEmpty)
+    payload["imageUrl3"] =
+        (payload["imageUrl3"] == null || payload["imageUrl3"].toString().trim().isEmpty)
             ? null
-            : data["imageUrl3"];
+            : payload["imageUrl3"];
 
     FormData formData = FormData.fromMap({
-      "productName": data["productName"],
-      "description": data["description"],
-      "price": data["price"].toString(),
-      "sectionId": data["sectionId"]?.toString(),
+      "productName": payload["productName"],
+      "description": payload["description"],
+      if (payload["price"] != null) "price": payload["price"].toString(),
+      if (payload["priceUSD"] != null)
+        "priceUSD": payload["priceUSD"].toString(),
+      "sectionId": payload["sectionId"]?.toString(),
 
       // 🔥 إرسال المفاتيح دائمًا
-      "imageUrl1": data["imageUrl1"],
-      "imageUrl2": data["imageUrl2"],
-      "imageUrl3": data["imageUrl3"],
+      "imageUrl1": payload["imageUrl1"],
+      "imageUrl2": payload["imageUrl2"],
+      "imageUrl3": payload["imageUrl3"],
 
       if (image1File != null)
         "image1File": await MultipartFile.fromFile(
@@ -951,12 +1009,26 @@ static Future<List<Map<String, dynamic>>?> getActiveDiscountsByShop(int shopId) 
 
 
 // ✏️ تعديل سعر منتج
-static Future<Map<String, dynamic>?> updateProductPrice(int productId, int newPrice) async {
+static Future<Map<String, dynamic>?> updateProductPrice(
+  int productId, {
+  double? price,
+  double? priceUSD,
+}) async {
   final url = Uri.parse('${ApiConfig.baseUrl}/products/updatePrice/$productId');
+
+  final payload = <String, dynamic>{
+    if (price != null) "price": price,
+    if (priceUSD != null) "priceUSD": priceUSD,
+  };
+
+  if (payload.isEmpty) {
+    return null;
+  }
+
   final response = await DioTransport.put(
     url,
     headers: {"Content-Type": "application/json"},
-    body: newPrice.toString(), // 👈 إرسال القيمة مباشرة
+    body: jsonEncode(payload),
   );
 
   if (response.statusCode == 200) {
@@ -1254,61 +1326,7 @@ static Future<Map<String, dynamic>?> getProductsBySection(int shopId, int sectio
     );
   }
 
-  // 🟢 1. إرسال إشعار ذكي
-  static Future<Map<String, dynamic>?> sendSmartNotification(
-      BuildContext context, int shopId, Map<String, dynamic> bodyData) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/Notifications/sendSmartNotification');
-    final body = jsonEncode(bodyData);
-
-    try {
-      final response = await DioTransport.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: body,
-      );
-
-      print('📩 SendSmartNotification Status: ${response.statusCode}');
-      print('📩 Body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        showErrorDialog(context, "فشل إرسال الإشعار: ${response.body}");
-        return null;
-      }
-    } catch (e) {
-      showErrorDialog(context, "حدث خطأ في الاتصال: $e");
-      return null;
-    }
-  }
-
-  // 🟢 2. توزيع إشعار
-  static Future<Map<String, dynamic>?> distributeNotification(
-      BuildContext context, int shopId, Map<String, dynamic> bodyData) async {
-    final url = Uri.parse('${ApiConfig.baseUrl}/Notifications/distributeNotification/$shopId');
-    final body = jsonEncode(bodyData);
-
-    try {
-      final response = await DioTransport.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: body,
-      );
-
-      print('📢 DistributeNotification Status: ${response.statusCode}');
-      print('📢 Body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        showErrorDialog(context, "فشل توزيع الإشعار: ${response.body}");
-        return null;
-      }
-    } catch (e) {
-      showErrorDialog(context, "حدث خطأ في الاتصال: $e");
-      return null;
-    }
-  }
+  
 
   // 🟢 3. الأكشن الموحّد
   static Future<Map<String, dynamic>?> sendAndDistribute(
@@ -1555,7 +1573,23 @@ static Future<Map<String, dynamic>> addSlider(Map<String, dynamic> sliderData) a
   print('📦 Body: ${response.body}');
 
   if (response.statusCode == 200) {
-    return jsonDecode(response.body);
+    final raw = jsonDecode(response.body);
+
+    if (raw is! Map) return null;
+    final map = Map<String, dynamic>.from(raw as Map);
+
+    return {
+      ...map,
+      'productId': map['productId'] ?? map['ProductID'] ?? map['id'],
+      'productName': map['productName'] ?? map['ProductName'],
+      'description': map['description'] ?? map['Description'],
+      'price': map['price'] ?? map['Price'],
+      'priceUSD': map['priceUSD'] ?? map['priceUsd'] ?? map['PriceUSD'],
+      'sectionId': map['sectionId'] ?? map['SectionID'],
+      'imageUrl1': map['imageUrl1'] ?? map['image'] ?? map['Image'],
+      'imageUrl2': map['imageUrl2'] ?? map['image2'] ?? map['Image_2'],
+      'imageUrl3': map['imageUrl3'] ?? map['image3'] ?? map['Image_3'],
+    };
   } else {
     return null;
   }
@@ -1682,8 +1716,14 @@ static Future<Map<String, dynamic>?> getOrdersByStatuses(
 }
 
 //تغيير حالة الطلب
-static Future<Map<String, dynamic>?> updateOrderStatus(int shopOrderId, String status) async {
-  final url = Uri.parse('${ApiConfig.baseUrl}/Orders/updateStatus?shopOrderId=$shopOrderId&status=$status');
+static Future<Map<String, dynamic>?> updateOrderStatus(
+  int shopOrderId,
+  String status,
+  int areaId,
+) async {
+  final url = Uri.parse(
+    '${ApiConfig.baseUrl}/Orders/updateStatus?shopOrderId=$shopOrderId&status=$status&areaId=$areaId',
+  );
 
   final response = await DioTransport.put(
     url,

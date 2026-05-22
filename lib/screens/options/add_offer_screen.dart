@@ -194,6 +194,9 @@ bool isSaving = false;
 final int mainProductId = selectedProduct!['productId'];
       // حالة مع إشعار
       if (offerId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final areaId = prefs.getInt('areaID') ?? prefs.getInt('areaId') ?? 0;
+
         final notifyResult = await ApiService.sendAndDistribute(
           context,
           shopId!,
@@ -201,6 +204,7 @@ final int mainProductId = selectedProduct!['productId'];
             "contextType": "Offer",
             "offerTitle": "عرض جديد",
             "senderId": shopId,
+            "areaId": areaId,
             "relatedEntity": "Offer",
             "relatedId": mainProductId,
 
